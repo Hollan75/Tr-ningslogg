@@ -13,6 +13,7 @@ import ActiveWorkoutScreen from '../screens/ActiveWorkoutScreen';
 import HistoryScreen from '../screens/HistoryScreen';
 import SessionDetailScreen from '../screens/SessionDetailScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import AICoachScreen from '../screens/AICoachScreen';
 
 // Root stack – contains tabs + modal screens
 export type RootStackParamList = {
@@ -29,6 +30,7 @@ export type TabParamList = {
   ExercisesTab: undefined;
   WorkoutTab: undefined;
   HistoryTab: undefined;
+  AICoachTab: undefined;
   SettingsTab: undefined;
 };
 
@@ -88,6 +90,16 @@ function Tabs() {
           tabBarLabel: 'Historik',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="time-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="AICoachTab"
+        component={AICoachScreen}
+        options={{
+          tabBarLabel: 'AI Coach',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="sparkles-outline" size={size} color={color} />
           ),
         }}
       />
