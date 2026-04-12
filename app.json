@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Träningslogg",
+    "slug": "traningslogg",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#0f0f13"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0f0f13"
+      },
+      "package": "com.hollan75.traningslogg"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.hollan75.traningslogg"
+    },
+    "platforms": ["android", "ios"]
+  }
+}
