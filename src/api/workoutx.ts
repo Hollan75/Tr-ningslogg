@@ -1,7 +1,7 @@
 import type { Exercise } from '../types';
 
 const BASE_URL = 'https://api.workoutxapp.com/v1';
-const API_KEY = 'wx_246b439b93051d40b2355015a07d4ad38403da23fc42bc18a83ef5c5';
+const API_KEY = process.env.EXPO_PUBLIC_WORKOUTX_API_KEY ?? '';
 
 interface ApiExercise {
   id: string;
