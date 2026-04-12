@@ -21,6 +21,7 @@ import {
   getTemplateExercises,
   addExerciseToTemplate,
   removeTemplateExercise,
+  updateTemplateExercise,
 } from '../database';
 import ExercisePicker from '../components/ExercisePicker';
 import type { TemplateExercise } from '../types';
@@ -29,6 +30,13 @@ import type { RootStackParamList } from '../navigation/AppNavigator';
 type RouteP = RouteProp<RootStackParamList, 'CreateTemplate'>;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+interface EditableExercise extends TemplateExercise {
+  sets_str: string;
+  reps_min_str: string;
+  reps_max_str: string;
+  rest_str: string;
+}
+
 export default function CreateTemplateScreen() {
   const navigation = useNavigation<Nav>();
   const { params } = useRoute<RouteP>();
@@ -36,46 +44,55 @@ export default function CreateTemplateScreen() {
 
   const [templateId, setTemplateId] = useState<number | null>(params?.templateId ?? null);
   const [name, setName] = useState('');
-  const [exercises, setExercises] = useState<TemplateExercise[]>([]);
+  const [exercises, setExercises] = useState<EditableExercise[]>([]);
   const [showPicker, setShowPicker] = useState(false);
 
   useEffect(() => {
-    if (params?.templateId) {
-      loadExercises(params.templateId);
-    }
+    if (params?.templateId) loadExercises(params.templateId);
   }, [params?.templateId]);
 
   async function loadExercises(tid: number) {
     const exs = await getTemplateExercises(tid);
-    setExercises(exs);
+    setExercises(
+      exs.map(e => ({
+        ...e,
+        sets_str: String(e.sets),
+        reps_min_str: String(e.reps_min),
+        reps_max_str: String(e.reps_max),
+        rest_str: String(e.rest_seconds),
+      }))
+    );
+  }
+
+  async function ensureTemplate(): Promise<number> {
+    if (templateId) return templateId;
+    if (!name.trim()) {
+      Alert.alert('Mallnamn krävs', 'Fyll i ett namn för mallen.');
+      throw new Error('no name');
+    }
+    const id = await createTemplate(name.trim());
+    setTemplateId(id);
+    return id;
   }
 
   async function handleSaveName() {
     if (!name.trim()) return;
-    if (templateId) {
-      await renameTemplate(templateId, name.trim());
-    } else {
+    if (templateId) await renameTemplate(templateId, name.trim());
+    else {
       const id = await createTemplate(name.trim());
       setTemplateId(id);
     }
   }
 
   async function handleAddExercise(exercise: { id: string; name: string; bodyPart: string | null }) {
-    if (!templateId) {
-      // Create template first
-      if (!name.trim()) {
-        Alert.alert('Mallnamn krävs', 'Fyll i ett namn för mallen innan du lägger till övningar.');
-        return;
-      }
-      const id = await createTemplate(name.trim());
-      setTemplateId(id);
-      await addExerciseToTemplate(id, exercise.id, 3, 8, 12, 60, exercises.length);
-      loadExercises(id);
-    } else {
-      await addExerciseToTemplate(templateId, exercise.id, 3, 8, 12, 60, exercises.length);
-      loadExercises(templateId);
+    try {
+      const tid = await ensureTemplate();
+      await addExerciseToTemplate(tid, exercise.id, 3, 8, 12, 60, exercises.length);
+      setShowPicker(false);
+      loadExercises(tid);
+    } catch {
+      /* name validation already shown */
     }
-    setShowPicker(false);
   }
 
   async function handleRemoveExercise(id: number) {
@@ -83,12 +100,41 @@ export default function CreateTemplateScreen() {
     setExercises(prev => prev.filter(e => e.id !== id));
   }
 
-  function handleDone() {
-    if (!name.trim() && !isEdit) {
-      Alert.alert('Mallnamn krävs', 'Fyll i ett namn för mallen.');
-      return;
-    }
-    navigation.goBack();
+  function updateField(
+    idx: number,
+    field: 'sets_str' | 'reps_min_str' | 'reps_max_str' | 'rest_str',
+    value: string
+  ) {
+    setExercises(prev => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], [field]: value };
+      return next;
+    });
+  }
+
+  async function handleFieldBlur(idx: number) {
+    const ex = exercises[idx];
+    const sets = Math.max(1, parseInt(ex.sets_str) || 1);
+    const repsMin = Math.max(1, parseInt(ex.reps_min_str) || 1);
+    const repsMax = Math.max(repsMin, parseInt(ex.reps_max_str) || repsMin);
+    const rest = Math.max(0, parseInt(ex.rest_str) || 60);
+
+    await updateTemplateExercise(ex.id, sets, repsMin, repsMax, rest);
+    setExercises(prev => {
+      const next = [...prev];
+      next[idx] = {
+        ...next[idx],
+        sets,
+        reps_min: repsMin,
+        reps_max: repsMax,
+        rest_seconds: rest,
+        sets_str: String(sets),
+        reps_min_str: String(repsMin),
+        reps_max_str: String(repsMax),
+        rest_str: String(rest),
+      };
+      return next;
+    });
   }
 
   return (
@@ -100,13 +146,13 @@ export default function CreateTemplateScreen() {
           <Text style={s.backText}>Tillbaka</Text>
         </TouchableOpacity>
         <Text style={s.navTitle}>{isEdit ? 'Redigera mall' : 'Ny mall'}</Text>
-        <TouchableOpacity style={s.doneBtn} onPress={handleDone}>
+        <TouchableOpacity style={s.doneBtn} onPress={() => navigation.goBack()}>
           <Text style={s.doneBtnText}>Klar</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
-        {/* Name input */}
+        {/* Name */}
         <Text style={s.label}>MALLNAMN</Text>
         <TextInput
           style={s.nameInput}
@@ -119,9 +165,9 @@ export default function CreateTemplateScreen() {
           onSubmitEditing={handleSaveName}
         />
 
-        {/* Exercises */}
+        {/* Exercises header */}
         <View style={s.sectionHeader}>
-          <Text style={s.label}>ÖVNINGAR</Text>
+          <Text style={s.label}>ÖVNINGAR  ({exercises.length})</Text>
           <TouchableOpacity style={s.addBtn} onPress={() => setShowPicker(true)}>
             <Ionicons name="add" size={16} color={COLORS.accent} />
             <Text style={s.addBtnText}>Lägg till</Text>
@@ -136,21 +182,62 @@ export default function CreateTemplateScreen() {
         ) : (
           exercises.map((ex, idx) => (
             <View key={ex.id} style={s.exCard}>
-              <View style={s.exIndex}>
-                <Text style={s.exIndexText}>{idx + 1}</Text>
+              {/* Exercise header */}
+              <View style={s.exHeader}>
+                <View style={s.exIndex}>
+                  <Text style={s.exIndexText}>{idx + 1}</Text>
+                </View>
+                <View style={s.exInfo}>
+                  <Text style={s.exName}>{ex.exercise_name}</Text>
+                  {ex.bodyPart ? <Text style={s.exMeta}>{ex.bodyPart}</Text> : null}
+                </View>
+                <TouchableOpacity onPress={() => handleRemoveExercise(ex.id)} style={s.removeBtn}>
+                  <Ionicons name="trash-outline" size={18} color={COLORS.danger} />
+                </TouchableOpacity>
               </View>
-              <View style={s.exInfo}>
-                <Text style={s.exName}>{ex.exercise_name}</Text>
-                <Text style={s.exMeta}>
-                  {ex.sets} set · {ex.reps_min}–{ex.reps_max} reps · {ex.rest_seconds}s vila
-                </Text>
+
+              {/* Config row */}
+              <View style={s.configRow}>
+                <ConfigField
+                  label="Set"
+                  value={ex.sets_str}
+                  onChange={v => updateField(idx, 'sets_str', v)}
+                  onBlur={() => handleFieldBlur(idx)}
+                />
+                <View style={s.repsGroup}>
+                  <Text style={s.configLabel}>Reps</Text>
+                  <View style={s.repsInputRow}>
+                    <TextInput
+                      style={[s.configInput, s.repsInput]}
+                      value={ex.reps_min_str}
+                      onChangeText={v => updateField(idx, 'reps_min_str', v)}
+                      onBlur={() => handleFieldBlur(idx)}
+                      keyboardType="number-pad"
+                      maxLength={3}
+                    />
+                    <Text style={s.repsDash}>–</Text>
+                    <TextInput
+                      style={[s.configInput, s.repsInput]}
+                      value={ex.reps_max_str}
+                      onChangeText={v => updateField(idx, 'reps_max_str', v)}
+                      onBlur={() => handleFieldBlur(idx)}
+                      keyboardType="number-pad"
+                      maxLength={3}
+                    />
+                  </View>
+                </View>
+                <ConfigField
+                  label="Vila (s)"
+                  value={ex.rest_str}
+                  onChange={v => updateField(idx, 'rest_str', v)}
+                  onBlur={() => handleFieldBlur(idx)}
+                />
               </View>
-              <TouchableOpacity
-                style={s.removeBtn}
-                onPress={() => handleRemoveExercise(ex.id)}
-              >
-                <Ionicons name="trash-outline" size={18} color={COLORS.danger} />
-              </TouchableOpacity>
+
+              {/* Summary line */}
+              <Text style={s.summary}>
+                {ex.sets} × {ex.reps_min}–{ex.reps_max} reps  ·  {ex.rest_seconds}s vila
+              </Text>
             </View>
           ))
         )}
@@ -162,6 +249,33 @@ export default function CreateTemplateScreen() {
         onClose={() => setShowPicker(false)}
       />
     </SafeAreaView>
+  );
+}
+
+function ConfigField({
+  label,
+  value,
+  onChange,
+  onBlur,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  onBlur: () => void;
+}) {
+  return (
+    <View style={s.configField}>
+      <Text style={s.configLabel}>{label}</Text>
+      <TextInput
+        style={s.configInput}
+        value={value}
+        onChangeText={onChange}
+        onBlur={onBlur}
+        keyboardType="number-pad"
+        maxLength={4}
+        textAlign="center"
+      />
+    </View>
   );
 }
 
@@ -181,7 +295,7 @@ const s = StyleSheet.create({
   navTitle: { color: COLORS.text, fontWeight: '600', fontSize: 16 },
   doneBtn: {
     backgroundColor: COLORS.accent,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 6,
     borderRadius: RADIUS.full,
     minWidth: 80,
@@ -189,8 +303,7 @@ const s = StyleSheet.create({
   },
   doneBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
 
-  content: { padding: 16, paddingBottom: 40 },
-
+  content: { padding: 16, paddingBottom: 48 },
   label: {
     fontSize: 11,
     fontWeight: '600',
@@ -209,7 +322,6 @@ const s = StyleSheet.create({
     padding: 12,
     marginBottom: 24,
   },
-
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -245,11 +357,9 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     padding: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    gap: 10,
+    marginBottom: 10,
   },
+  exHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
   exIndex: {
     width: 28,
     height: 28,
@@ -262,6 +372,49 @@ const s = StyleSheet.create({
   exIndexText: { color: COLORS.accent, fontWeight: '700', fontSize: 13 },
   exInfo: { flex: 1 },
   exName: { color: COLORS.text, fontWeight: '600', fontSize: 14 },
-  exMeta: { color: COLORS.textMuted, fontSize: 12, marginTop: 2 },
+  exMeta: { color: COLORS.textMuted, fontSize: 12, marginTop: 1 },
   removeBtn: { padding: 4 },
+
+  configRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+    alignItems: 'flex-end',
+  },
+  configField: { alignItems: 'center', flex: 1 },
+  configLabel: {
+    color: COLORS.textMuted,
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  configInput: {
+    backgroundColor: COLORS.surface2,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.sm,
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '600',
+    padding: 8,
+    textAlign: 'center',
+    width: '100%',
+  },
+  repsGroup: { flex: 2, alignItems: 'center' },
+  repsInputRow: { flexDirection: 'row', alignItems: 'center', gap: 4, width: '100%' },
+  repsInput: { flex: 1, width: undefined },
+  repsDash: { color: COLORS.textMuted, fontSize: 16, fontWeight: '300' },
+
+  summary: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingTop: 8,
+  },
 });

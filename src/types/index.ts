@@ -39,6 +39,7 @@ export interface WorkoutSession {
   template_name?: string;
   set_count?: number;
   exercise_count?: number;
+  total_volume?: number; // sum(reps * weight_kg)
 }
 
 export interface SessionSet {
@@ -58,6 +59,7 @@ export interface WorkoutExercise {
   exerciseId: string;
   name: string;
   bodyPart: string | null;
+  restSeconds: number;
   sets: WorkoutSet[];
 }
 
