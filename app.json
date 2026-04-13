@@ -3,8 +3,13 @@
     "name": "Träningslogg",
     "slug": "traningslogg",
     "version": "1.0.0",
+    "scheme": "traningslogg",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "plugins": [
+      "expo-dev-client"
+    ],
     "splash": {
       "backgroundColor": "#0f0f13"
     },
@@ -12,12 +17,12 @@
       "adaptiveIcon": {
         "backgroundColor": "#0f0f13"
       },
-      "package": "com.hollan75.traningslogg"
+      "package": "com.hollan75.traningslogg",
+      "edgeToEdgeEnabled": true
     },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.hollan75.traningslogg"
-    },
-    "platforms": ["android", "ios"]
+    }
   }
 }
