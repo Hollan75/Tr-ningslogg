@@ -7,7 +7,6 @@
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
-    "plugins": [],
     "splash": {
       "backgroundColor": "#0f0f13"
     },
