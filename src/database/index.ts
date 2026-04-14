@@ -128,7 +128,7 @@ export async function insertExercisesBatch(exercises: Exercise[]): Promise<void>
   await db.withTransactionAsync(async () => {
     for (const ex of exercises) {
       await db.runAsync(
-        `INSERT OR REPLACE INTO exercises
+        `INSERT OR IGNORE INTO exercises
          (id, name, category, primaryMuscles, secondaryMuscles, equipment, bodyPart, gifUrl, instructions, difficulty)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -229,7 +229,13 @@ export async function insertExercise(exercise: Exercise): Promise<void> {
 
 export async function clearExercises(): Promise<void> {
   const db = await getDb();
-  await db.runAsync('DELETE FROM exercises');
+  // Only delete exercises that are not referenced by any template or session.
+  // Deleting referenced rows would violate FK constraints.
+  await db.runAsync(`
+    DELETE FROM exercises
+    WHERE id NOT IN (SELECT exercise_id FROM template_exercises)
+      AND id NOT IN (SELECT exercise_id FROM session_sets)
+  `);
 }
 
 // ─── WORKOUT TEMPLATES ──────────────────────────────────────────────────────
