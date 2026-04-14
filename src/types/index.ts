@@ -8,6 +8,7 @@ export interface Exercise {
   bodyPart: string | null;
   gifUrl: string | null;
   instructions: string | null; // semicolon-separated
+  difficulty: string | null;
 }
 
 export interface WorkoutTemplate {

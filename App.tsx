@@ -7,7 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
 import { getDb, getSetting, setSetting, insertExercisesBatch } from './src/database';
-import { fetchAllExercises } from './src/api/workoutx';
+import { loadLocalExercises } from './src/data/localExercises';
 import AppNavigator from './src/navigation/AppNavigator';
 import { COLORS } from './src/theme';
 
@@ -15,7 +15,6 @@ type InitState = 'loading' | 'syncing' | 'ready' | 'error';
 
 export default function App() {
   const [initState, setInitState] = useState<InitState>('loading');
-  const [syncProgress, setSyncProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -32,21 +31,10 @@ export default function App() {
       }
 
       setInitState('syncing');
-      setSyncProgress(0);
 
-      try {
-        const exercises = await fetchAllExercises((count) => setSyncProgress(count));
-        if (exercises.length > 0) {
-          await insertExercisesBatch(exercises);
-          await setSetting('exercises_synced', 'true');
-        } else {
-          // No exercises returned – mark sync as attempted so we don't retry on every launch
-          await setSetting('exercises_synced', 'empty');
-        }
-      } catch (syncErr) {
-        // Sync failed; app still works, user can retry in Settings
-        console.warn('Exercise sync failed:', syncErr);
-      }
+      const exercises = loadLocalExercises();
+      await insertExercisesBatch(exercises);
+      await setSetting('exercises_synced', 'true');
 
       setInitState('ready');
     } catch (err) {
@@ -64,9 +52,7 @@ export default function App() {
         <Text style={styles.splashTitle}>Träningslogg</Text>
         <ActivityIndicator color={COLORS.accent} size="large" style={{ marginTop: 32 }} />
         {initState === 'syncing' && (
-          <Text style={styles.splashSub}>
-            Hämtar övningar{syncProgress > 0 ? ` (${syncProgress})` : '…'}
-          </Text>
+          <Text style={styles.splashSub}>Laddar övningar…</Text>
         )}
       </View>
     );

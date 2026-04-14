@@ -30,7 +30,8 @@ async function setupSchema(db: SQLite.SQLiteDatabase): Promise<void> {
       equipment TEXT,
       bodyPart TEXT,
       gifUrl TEXT,
-      instructions TEXT
+      instructions TEXT,
+      difficulty TEXT
     );
   `);
 
@@ -128,8 +129,8 @@ export async function insertExercisesBatch(exercises: Exercise[]): Promise<void>
     for (const ex of exercises) {
       await db.runAsync(
         `INSERT OR REPLACE INTO exercises
-         (id, name, category, primaryMuscles, secondaryMuscles, equipment, bodyPart, gifUrl, instructions)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, name, category, primaryMuscles, secondaryMuscles, equipment, bodyPart, gifUrl, instructions, difficulty)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           ex.id,
           ex.name,
@@ -140,6 +141,7 @@ export async function insertExercisesBatch(exercises: Exercise[]): Promise<void>
           ex.bodyPart ?? null,
           ex.gifUrl ?? null,
           ex.instructions ?? null,
+          ex.difficulty ?? null,
         ]
       );
     }

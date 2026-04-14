@@ -22,7 +22,7 @@ import {
   insertExercisesBatch,
   clearAllData,
 } from '../database';
-import { fetchAllExercises } from '../api/workoutx';
+import { loadLocalExercises } from '../data/localExercises';
 
 type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
 
@@ -30,7 +30,6 @@ export default function SettingsScreen() {
   const [exerciseCount, setExerciseCount] = useState(0);
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
-  const [syncProgress, setSyncProgress] = useState(0);
   const [syncError, setSyncError] = useState<string | null>(null);
 
   useFocusEffect(
@@ -50,16 +49,13 @@ export default function SettingsScreen() {
 
   async function handleSync() {
     setSyncStatus('syncing');
-    setSyncProgress(0);
     setSyncError(null);
     try {
-      const exercises = await fetchAllExercises((n) => setSyncProgress(n));
-      if (exercises.length > 0) {
-        await clearExercises();
-        await insertExercisesBatch(exercises);
-        await setSetting('exercises_synced', 'true');
-        await setSetting('exercises_synced_at', new Date().toISOString());
-      }
+      const exercises = loadLocalExercises();
+      await clearExercises();
+      await insertExercisesBatch(exercises);
+      await setSetting('exercises_synced', 'true');
+      await setSetting('exercises_synced_at', new Date().toISOString());
       await loadInfo();
       setSyncStatus('success');
       setTimeout(() => setSyncStatus('idle'), 3000);
@@ -128,9 +124,7 @@ export default function SettingsScreen() {
           {syncStatus === 'syncing' && (
             <View style={s.syncRow}>
               <ActivityIndicator color={COLORS.accent} size="small" />
-              <Text style={s.syncText}>
-                Synkar… {syncProgress > 0 ? `${syncProgress} hämtade` : ''}
-              </Text>
+              <Text style={s.syncText}>Laddar övningar…</Text>
             </View>
           )}
           {syncStatus === 'success' && (
@@ -156,10 +150,10 @@ export default function SettingsScreen() {
             {syncStatus === 'syncing' ? (
               <ActivityIndicator color="#fff" size="small" />
             ) : (
-              <Ionicons name="cloud-download-outline" size={18} color="#fff" />
+              <Ionicons name="refresh-outline" size={18} color="#fff" />
             )}
             <Text style={s.syncBtnText}>
-              {exerciseCount === 0 ? 'Hämta övningar' : 'Synka om övningar'}
+              {exerciseCount === 0 ? 'Ladda övningar' : 'Ladda om övningar'}
             </Text>
           </TouchableOpacity>
         </View>
