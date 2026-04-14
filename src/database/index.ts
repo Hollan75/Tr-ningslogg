@@ -40,6 +40,15 @@ async function setupSchema(db: SQLite.SQLiteDatabase): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_exercises_body_part ON exercises(bodyPart);
   `);
 
+  // Migrations: add columns that may be missing in older database files
+  const exerciseCols = await db.getAllAsync<{ name: string }>(
+    `PRAGMA table_info(exercises)`
+  );
+  const colNames = exerciseCols.map(c => c.name);
+  if (!colNames.includes('difficulty')) {
+    await db.execAsync('ALTER TABLE exercises ADD COLUMN difficulty TEXT');
+  }
+
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS workout_templates (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
