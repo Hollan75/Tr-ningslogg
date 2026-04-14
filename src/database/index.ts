@@ -133,7 +133,8 @@ export async function deleteSetting(key: string): Promise<void> {
 
 export async function insertExercisesBatch(exercises: Exercise[]): Promise<void> {
   const db = await getDb();
-  await db.withTransactionAsync(async () => {
+  await db.execAsync('BEGIN');
+  try {
     for (const ex of exercises) {
       await db.runAsync(
         `INSERT OR IGNORE INTO exercises
@@ -153,7 +154,11 @@ export async function insertExercisesBatch(exercises: Exercise[]): Promise<void>
         ]
       );
     }
-  });
+    await db.execAsync('COMMIT');
+  } catch (e) {
+    await db.execAsync('ROLLBACK');
+    throw e;
+  }
 }
 
 export async function getExercises(
@@ -474,12 +479,14 @@ export async function getStats(): Promise<{
 
 export async function clearAllData(): Promise<void> {
   const db = await getDb();
-  await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM session_sets');
-    await db.runAsync('DELETE FROM workout_sessions');
-    await db.runAsync('DELETE FROM template_exercises');
-    await db.runAsync('DELETE FROM workout_templates');
-    await db.runAsync('DELETE FROM exercises');
-    await db.runAsync('DELETE FROM settings');
-  });
+  await db.execAsync(`
+    BEGIN;
+    DELETE FROM session_sets;
+    DELETE FROM workout_sessions;
+    DELETE FROM template_exercises;
+    DELETE FROM workout_templates;
+    DELETE FROM exercises;
+    DELETE FROM settings;
+    COMMIT;
+  `);
 }
