@@ -206,6 +206,27 @@ export async function getExerciseCount(): Promise<number> {
   return row?.count ?? 0;
 }
 
+export async function insertExercise(exercise: Exercise): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT OR REPLACE INTO exercises
+     (id, name, category, primaryMuscles, secondaryMuscles, equipment, bodyPart, gifUrl, instructions, difficulty)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      exercise.id,
+      exercise.name,
+      exercise.category ?? null,
+      exercise.primaryMuscles,
+      exercise.secondaryMuscles,
+      exercise.equipment ?? null,
+      exercise.bodyPart ?? null,
+      exercise.gifUrl ?? null,
+      exercise.instructions ?? null,
+      exercise.difficulty ?? null,
+    ]
+  );
+}
+
 export async function clearExercises(): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM exercises');

@@ -102,11 +102,14 @@ export default function ActiveWorkoutScreen() {
     Vibration.vibrate([0, 300, 100, 300, 100, 300]);
   });
 
-  // Load template exercises on mount
+  // Load template exercises on mount; auto-open picker for free workouts
   useEffect(() => {
     async function load() {
       const session = await getSessionById(sessionId);
-      if (!session?.template_id) return;
+      if (!session?.template_id) {
+        setShowPicker(true); // free workout – let user pick first exercise
+        return;
+      }
       const tes = await getTemplateExercises(session.template_id);
       const exs: WorkoutExercise[] = tes.map(te => ({
         exerciseId: te.exercise_id,
