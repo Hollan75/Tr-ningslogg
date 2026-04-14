@@ -40,13 +40,12 @@ async function setupSchema(db: SQLite.SQLiteDatabase): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_exercises_body_part ON exercises(bodyPart);
   `);
 
-  // Migrations: add columns that may be missing in older database files
-  const exerciseCols = await db.getAllAsync<{ name: string }>(
-    `PRAGMA table_info(exercises)`
-  );
-  const colNames = exerciseCols.map(c => c.name);
-  if (!colNames.includes('difficulty')) {
+  // Migration: add difficulty column if missing in older databases.
+  // Use try/catch instead of PRAGMA table_info to avoid bridge serialization issues.
+  try {
     await db.execAsync('ALTER TABLE exercises ADD COLUMN difficulty TEXT');
+  } catch {
+    // Column already exists – expected on all runs except the very first after upgrade
   }
 
   await db.execAsync(`
@@ -141,16 +140,16 @@ export async function insertExercisesBatch(exercises: Exercise[]): Promise<void>
          (id, name, category, primaryMuscles, secondaryMuscles, equipment, bodyPart, gifUrl, instructions, difficulty)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          ex.id,
-          ex.name,
-          ex.category ?? null,
-          ex.primaryMuscles,
-          ex.secondaryMuscles,
-          ex.equipment ?? null,
-          ex.bodyPart ?? null,
-          ex.gifUrl ?? null,
-          ex.instructions ?? null,
-          ex.difficulty ?? null,
+          String(ex.id),
+          String(ex.name),
+          ex.category != null ? String(ex.category) : null,
+          ex.primaryMuscles != null ? String(ex.primaryMuscles) : '[]',
+          ex.secondaryMuscles != null ? String(ex.secondaryMuscles) : '[]',
+          ex.equipment != null ? String(ex.equipment) : null,
+          ex.bodyPart != null ? String(ex.bodyPart) : null,
+          ex.gifUrl != null ? String(ex.gifUrl) : null,
+          ex.instructions != null ? String(ex.instructions) : null,
+          ex.difficulty != null ? String(ex.difficulty) : null,
         ]
       );
     }
@@ -222,16 +221,16 @@ export async function insertExercise(exercise: Exercise): Promise<void> {
      (id, name, category, primaryMuscles, secondaryMuscles, equipment, bodyPart, gifUrl, instructions, difficulty)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      exercise.id,
-      exercise.name,
-      exercise.category ?? null,
-      exercise.primaryMuscles,
-      exercise.secondaryMuscles,
-      exercise.equipment ?? null,
-      exercise.bodyPart ?? null,
-      exercise.gifUrl ?? null,
-      exercise.instructions ?? null,
-      exercise.difficulty ?? null,
+      String(exercise.id),
+      String(exercise.name),
+      exercise.category != null ? String(exercise.category) : null,
+      exercise.primaryMuscles != null ? String(exercise.primaryMuscles) : '[]',
+      exercise.secondaryMuscles != null ? String(exercise.secondaryMuscles) : '[]',
+      exercise.equipment != null ? String(exercise.equipment) : null,
+      exercise.bodyPart != null ? String(exercise.bodyPart) : null,
+      exercise.gifUrl != null ? String(exercise.gifUrl) : null,
+      exercise.instructions != null ? String(exercise.instructions) : null,
+      exercise.difficulty != null ? String(exercise.difficulty) : null,
     ]
   );
 }
