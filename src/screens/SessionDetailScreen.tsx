@@ -158,7 +158,7 @@ export default function SessionDetailScreen() {
                   <Text style={[s.col, s.colVal, s.rowText]}>
                     {set.weight_kg != null ? `${set.weight_kg} kg` : '—'}
                   </Text>
-                  <View style={[s.col, s.colTag]}>
+                  <View style={s.colTag}>
                     {set.is_warmup ? (
                       <View style={s.wuBadge}>
                         <Text style={s.wuText}>Uppv.</Text>

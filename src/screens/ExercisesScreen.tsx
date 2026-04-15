@@ -203,6 +203,7 @@ function FilterRow({
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={s.chipsScrollView}
         contentContainerStyle={s.chipsRow}
       >
         {items.map(item => (
@@ -420,6 +421,7 @@ const s = StyleSheet.create({
     width: 62,
     flexShrink: 0,
   },
+  chipsScrollView: { flex: 1, minWidth: 0 },
   chipsRow: {
     flexDirection: 'row',
     gap: 6,
