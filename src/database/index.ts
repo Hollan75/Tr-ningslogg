@@ -71,6 +71,12 @@ async function setupSchema(db: SQLite.SQLiteDatabase): Promise<void> {
     );
   `);
 
+  try {
+    await db.execAsync('ALTER TABLE template_exercises ADD COLUMN weight_kg REAL DEFAULT 0');
+  } catch {
+    // Column already exists
+  }
+
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS workout_sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -298,17 +304,16 @@ export async function addExerciseToTemplate(
   templateId: number,
   exerciseId: string,
   sets: number,
-  repsMin: number,
-  repsMax: number,
-  restSeconds: number,
+  reps: number,
+  weightKg: number,
   orderIndex: number
 ): Promise<void> {
   const db = await getDb();
   await db.runAsync(
     `INSERT INTO template_exercises
-     (template_id, exercise_id, sets, reps_min, reps_max, rest_seconds, order_index)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [templateId, exerciseId, sets, repsMin, repsMax, restSeconds, orderIndex]
+     (template_id, exercise_id, sets, reps_min, reps_max, rest_seconds, order_index, weight_kg)
+     VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
+    [templateId, exerciseId, sets, reps, reps, orderIndex, weightKg]
   );
 }
 
@@ -320,14 +325,13 @@ export async function removeTemplateExercise(id: number): Promise<void> {
 export async function updateTemplateExercise(
   id: number,
   sets: number,
-  repsMin: number,
-  repsMax: number,
-  restSeconds: number
+  reps: number,
+  weightKg: number
 ): Promise<void> {
   const db = await getDb();
   await db.runAsync(
-    'UPDATE template_exercises SET sets=?, reps_min=?, reps_max=?, rest_seconds=? WHERE id=?',
-    [sets, repsMin, repsMax, restSeconds, id]
+    'UPDATE template_exercises SET sets=?, reps_min=?, reps_max=?, weight_kg=? WHERE id=?',
+    [sets, reps, reps, weightKg, id]
   );
 }
 

@@ -27,6 +27,7 @@ export interface TemplateExercise {
   reps_max: number;
   rest_seconds: number;
   order_index: number;
+  weight_kg?: number | null;
   exercise_name?: string;
   bodyPart?: string;
 }

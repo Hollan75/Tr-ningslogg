@@ -5,6 +5,7 @@ import {
   Text,
   TextInput,
   FlatList,
+  ScrollView,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
@@ -92,16 +93,17 @@ export default function ExercisePicker({ visible, onSelect, onClose }: Props) {
 
         {/* Body-part chips */}
         {bodyParts.length > 0 && (
-          <FlatList
-            data={bodyParts}
-            keyExtractor={(item) => item}
+          <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
+            style={styles.chipsScroll}
             contentContainerStyle={styles.chipsRow}
-            renderItem={({ item }) => {
+          >
+            {bodyParts.map(item => {
               const active = bodyPartFilter === item;
               return (
                 <TouchableOpacity
+                  key={item}
                   style={[styles.chip, active && styles.chipActive]}
                   onPress={() => setBodyPartFilter(active ? null : item)}
                 >
@@ -110,8 +112,8 @@ export default function ExercisePicker({ visible, onSelect, onClose }: Props) {
                   </Text>
                 </TouchableOpacity>
               );
-            }}
-          />
+            })}
+          </ScrollView>
         )}
 
         {/* Exercise list */}
@@ -183,7 +185,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     paddingVertical: 10,
   },
-  chipsRow: { paddingHorizontal: 12, paddingBottom: 8, gap: 8, flexDirection: 'row' },
+  chipsScroll: { flexShrink: 0 },
+  chipsRow: { paddingHorizontal: 12, paddingVertical: 6, gap: 8, flexDirection: 'row' },
   chip: {
     backgroundColor: COLORS.surface2,
     borderRadius: RADIUS.full,

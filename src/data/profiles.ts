@@ -11,7 +11,7 @@ export interface UserProfile {
 export const PROFILES: Record<string, UserProfile> = {
   Philip: {
     name: 'Philip',
-    age: 28,
+    age: 50,
     gender: 'man',
     goal: 'Bygga muskelmassa och styrka',
     experience: 'Intermediär – tränat 3 år',

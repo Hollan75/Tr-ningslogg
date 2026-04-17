@@ -32,9 +32,8 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 interface EditableExercise extends TemplateExercise {
   sets_str: string;
-  reps_min_str: string;
-  reps_max_str: string;
-  rest_str: string;
+  reps_str: string;
+  weight_str: string;
 }
 
 export default function CreateTemplateScreen() {
@@ -57,9 +56,8 @@ export default function CreateTemplateScreen() {
       exs.map(e => ({
         ...e,
         sets_str: String(e.sets),
-        reps_min_str: String(e.reps_min),
-        reps_max_str: String(e.reps_max),
-        rest_str: String(e.rest_seconds),
+        reps_str: String(e.reps_min),
+        weight_str: e.weight_kg != null ? String(e.weight_kg) : '0',
       }))
     );
   }
@@ -87,7 +85,7 @@ export default function CreateTemplateScreen() {
   async function handleAddExercise(exercise: { id: string; name: string; bodyPart: string | null }) {
     try {
       const tid = await ensureTemplate();
-      await addExerciseToTemplate(tid, exercise.id, 3, 8, 12, 60, exercises.length);
+      await addExerciseToTemplate(tid, exercise.id, 3, 10, 0, exercises.length);
       setShowPicker(false);
       loadExercises(tid);
     } catch {
@@ -100,11 +98,7 @@ export default function CreateTemplateScreen() {
     setExercises(prev => prev.filter(e => e.id !== id));
   }
 
-  function updateField(
-    idx: number,
-    field: 'sets_str' | 'reps_min_str' | 'reps_max_str' | 'rest_str',
-    value: string
-  ) {
+  function updateField(idx: number, field: 'sets_str' | 'reps_str' | 'weight_str', value: string) {
     setExercises(prev => {
       const next = [...prev];
       next[idx] = { ...next[idx], [field]: value };
@@ -115,23 +109,21 @@ export default function CreateTemplateScreen() {
   async function handleFieldBlur(idx: number) {
     const ex = exercises[idx];
     const sets = Math.max(1, parseInt(ex.sets_str) || 1);
-    const repsMin = Math.max(1, parseInt(ex.reps_min_str) || 1);
-    const repsMax = Math.max(repsMin, parseInt(ex.reps_max_str) || repsMin);
-    const rest = Math.max(0, parseInt(ex.rest_str) || 60);
+    const reps = Math.max(1, parseInt(ex.reps_str) || 1);
+    const weight = Math.max(0, parseFloat(ex.weight_str) || 0);
 
-    await updateTemplateExercise(ex.id, sets, repsMin, repsMax, rest);
+    await updateTemplateExercise(ex.id, sets, reps, weight);
     setExercises(prev => {
       const next = [...prev];
       next[idx] = {
         ...next[idx],
         sets,
-        reps_min: repsMin,
-        reps_max: repsMax,
-        rest_seconds: rest,
+        reps_min: reps,
+        reps_max: reps,
+        weight_kg: weight,
         sets_str: String(sets),
-        reps_min_str: String(repsMin),
-        reps_max_str: String(repsMax),
-        rest_str: String(rest),
+        reps_str: String(reps),
+        weight_str: String(weight),
       };
       return next;
     });
@@ -204,39 +196,25 @@ export default function CreateTemplateScreen() {
                   onChange={v => updateField(idx, 'sets_str', v)}
                   onBlur={() => handleFieldBlur(idx)}
                 />
-                <View style={s.repsGroup}>
-                  <Text style={s.configLabel}>Reps</Text>
-                  <View style={s.repsInputRow}>
-                    <TextInput
-                      style={[s.configInput, s.repsInput]}
-                      value={ex.reps_min_str}
-                      onChangeText={v => updateField(idx, 'reps_min_str', v)}
-                      onBlur={() => handleFieldBlur(idx)}
-                      keyboardType="number-pad"
-                      maxLength={3}
-                    />
-                    <Text style={s.repsDash}>–</Text>
-                    <TextInput
-                      style={[s.configInput, s.repsInput]}
-                      value={ex.reps_max_str}
-                      onChangeText={v => updateField(idx, 'reps_max_str', v)}
-                      onBlur={() => handleFieldBlur(idx)}
-                      keyboardType="number-pad"
-                      maxLength={3}
-                    />
-                  </View>
-                </View>
                 <ConfigField
-                  label="Vila (s)"
-                  value={ex.rest_str}
-                  onChange={v => updateField(idx, 'rest_str', v)}
+                  label="Reps"
+                  value={ex.reps_str}
+                  onChange={v => updateField(idx, 'reps_str', v)}
                   onBlur={() => handleFieldBlur(idx)}
+                />
+                <ConfigField
+                  label="Vikt (kg)"
+                  value={ex.weight_str}
+                  onChange={v => updateField(idx, 'weight_str', v)}
+                  onBlur={() => handleFieldBlur(idx)}
+                  decimal
                 />
               </View>
 
               {/* Summary line */}
               <Text style={s.summary}>
-                {ex.sets} × {ex.reps_min}–{ex.reps_max} reps  ·  {ex.rest_seconds}s vila
+                {ex.sets} × {ex.reps_min} reps
+                {ex.weight_kg ? `  ·  ${ex.weight_kg} kg` : ''}
               </Text>
             </View>
           ))
@@ -257,11 +235,13 @@ function ConfigField({
   value,
   onChange,
   onBlur,
+  decimal,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   onBlur: () => void;
+  decimal?: boolean;
 }) {
   return (
     <View style={s.configField}>
@@ -271,8 +251,8 @@ function ConfigField({
         value={value}
         onChangeText={onChange}
         onBlur={onBlur}
-        keyboardType="number-pad"
-        maxLength={4}
+        keyboardType={decimal ? 'decimal-pad' : 'number-pad'}
+        maxLength={6}
         textAlign="center"
       />
     </View>
@@ -403,10 +383,6 @@ const s = StyleSheet.create({
     textAlign: 'center',
     width: '100%',
   },
-  repsGroup: { flex: 2, alignItems: 'center' },
-  repsInputRow: { flexDirection: 'row', alignItems: 'center', gap: 4, width: '100%' },
-  repsInput: { flex: 1, width: undefined },
-  repsDash: { color: COLORS.textMuted, fontSize: 16, fontWeight: '300' },
 
   summary: {
     color: COLORS.textMuted,
