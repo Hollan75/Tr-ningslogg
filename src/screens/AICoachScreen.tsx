@@ -52,16 +52,39 @@ function buildSystemPrompt(profileKey: string, history: SessionWithSets[]): stri
           2
         );
 
+  const injuryBlock = profile.injuries?.length
+    ? `\nSkador/begränsningar:\n${profile.injuries.map(i => `- ${i}`).join('\n')}`
+    : '';
+  const focusBlock = profile.focusAreas?.length
+    ? `\nFokusområden:\n${profile.focusAreas.map(f => `- ${f}`).join('\n')}`
+    : '';
+  const principlesBlock = profile.trainingPrinciples?.length
+    ? `\nTräningsprinciper:\n${profile.trainingPrinciples.map(p => `- ${p}`).join('\n')}`
+    : '';
+  const instructionsBlock = profile.coachInstructions?.length
+    ? `\nViktiga instruktioner för dig som coach:\n${profile.coachInstructions.map(c => `- ${c}`).join('\n')}`
+    : '';
+  const equipmentBlock = profile.equipment?.length
+    ? `\nUtrustning: ${profile.equipment.join(', ')}`
+    : '';
+
   return `Du är en personlig tränare och träningscoach.
 
 Användarens profil:
-${JSON.stringify(profile, null, 2)}
+- Namn: ${profile.name}
+- Ålder: ${profile.age} år
+- Kön: ${profile.gender}
+- Mål: ${profile.goal}
+- Erfarenhet: ${profile.experience}
+- Träningsnivå: ${profile.fitnessLevel ?? ''}
+- Pass per vecka: ${profile.daysPerWeek}${equipmentBlock}${injuryBlock}${focusBlock}${principlesBlock}${instructionsBlock}
+- Övrigt: ${profile.notes}
 
 Senaste träningshistorik (senaste ${history.length} pass):
 ${historyJson}
 
 Svara alltid på svenska. Var konkret, uppmuntrande och personlig.
-Anpassa alltid dina råd efter profilen och historiken ovan.`;
+Anpassa ALLTID dina råd strikt efter profilen ovan – särskilt skador och begränsningar.`;
 }
 
 export default function AICoachScreen() {
