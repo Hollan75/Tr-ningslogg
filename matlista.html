@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Veckans Mat</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #faf8f5;
+      --white: #ffffff;
+      --text: #1c1917;
+      --text-muted: #78716c;
+      --primary: #ea580c;
+      --primary-light: #fff7ed;
+      --primary-hover: #c2410c;
+      --green: #16a34a;
+      --green-light: #f0fdf4;
+      --green-hover: #15803d;
+      --red: #dc2626;
+      --red-light: #fef2f2;
+      --border: #e7e5e4;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+      --shadow: 0 4px 16px rgba(0,0,0,0.10);
+      --radius: 16px;
+      --radius-sm: 10px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      padding-bottom: 100px;
+    }
+
+    /* ── HEADER ── */
+    .app-header {
+      background: var(--white);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 20px 14px;
+      text-align: center;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .app-header h1 {
+      font-size: 1.5rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+
+    .app-header .subtitle {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .mode-badge {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 20px;
+      margin-top: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .badge-admin { background: #fff7ed; color: #ea580c; }
+    .badge-vote  { background: #f0fdf4; color: #16a34a; }
+    .badge-resp  { background: #eff6ff; color: #2563eb; }
+
+    /* ── WEEK NAV (admin only) ── */
+    .week-nav {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 14px 20px;
+      background: var(--white);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .week-nav span {
+      font-weight: 700;
+      font-size: 0.92rem;
+      min-width: 160px;
+      text-align: center;
+    }
+
+    .week-nav button {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+    }
+
+    .week-nav button:hover { background: var(--border); }
+
+    /* ── CONTAINER ── */
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 20px 16px;
+    }
+
+    /* ── VOTER NAME AREA ── */
+    .voter-banner {
+      background: var(--green-light);
+      border: 1.5px solid #bbf7d0;
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      margin-bottom: 20px;
+    }
+
+    .voter-banner p {
+      font-size: 0.88rem;
+      color: #15803d;
+      margin-bottom: 10px;
+      font-weight: 500;
+    }
+
+    .voter-input-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .voter-input-row input {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1.5px solid #86efac;
+      border-radius: var(--radius-sm);
+      font-size: 0.95rem;
+      background: var(--white);
+      font-family: inherit;
+      color: var(--text);
+    }
+
+    .voter-input-row input:focus {
+      outline: none;
+      border-color: var(--green);
+    }
+
+    /* ── RESPONSE BANNER ── */
+    .response-banner {
+      background: #eff6ff;
+      border: 1.5px solid #bfdbfe;
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      margin-bottom: 20px;
+    }
+
+    .response-banner h3 {
+      font-size: 1rem;
+      color: #1d4ed8;
+      margin-bottom: 6px;
+    }
+
+    .response-banner p {
+      font-size: 0.85rem;
+      color: #3b82f6;
+    }
+
+    .picks-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .pick-pill {
+      background: #dbeafe;
+      color: #1e40af;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    /* ── DAY CARDS ── */
+    .day-card {
+      background: var(--white);
+      border-radius: var(--radius);
+      margin-bottom: 14px;
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .day-header {
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .day-emoji { font-size: 1.4rem; }
+
+    .day-header-text { flex: 1; }
+
+    .day-name {
+      font-weight: 700;
+      font-size: 1rem;
+    }
+
+    .day-date {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    .day-body { padding: 0 18px 14px; }
+
+    /* Meal list */
+    .meal-list { list-style: none; margin-bottom: 10px; }
+
+    .meal-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .meal-item:last-child { border-bottom: none; }
+
+    .meal-name {
+      flex: 1;
+      font-size: 0.92rem;
+      font-weight: 500;
+    }
+
+    .meal-by {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    /* Vote toggle button */
+    .vote-btn {
+      background: none;
+      border: 2px solid var(--border);
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+
+    .vote-btn:hover {
+      border-color: var(--green);
+      background: var(--green-light);
+    }
+
+    .vote-btn.voted {
+      background: var(--green);
+      border-color: var(--green);
+      color: white;
+    }
+
+    /* Picked highlight in response view */
+    .meal-item.picked .meal-name {
+      color: #1d4ed8;
+      font-weight: 700;
+    }
+
+    .meal-item.picked { background: #eff6ff; border-radius: 8px; padding: 9px 8px; }
+
+    /* Delete button (admin) */
+    .del-btn {
+      background: none;
+      border: none;
+      color: #d1d5db;
+      font-size: 1rem;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 6px;
+      transition: color 0.15s;
+      flex-shrink: 0;
+    }
+
+    .del-btn:hover { color: var(--red); }
+
+    /* ── ADD MEAL ROW ── */
+    .add-meal-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .add-meal-row input {
+      flex: 1;
+      padding: 9px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 0.88rem;
+      background: var(--bg);
+      font-family: inherit;
+      color: var(--text);
+      transition: border-color 0.15s;
+    }
+
+    .add-meal-row input:focus {
+      outline: none;
+      border-color: var(--primary);
+      background: var(--white);
+    }
+
+    .add-meal-row input::placeholder { color: #a8a29e; }
+
+    /* ── BUTTONS ── */
+    button { cursor: pointer; font-family: inherit; border: none; transition: all 0.15s; }
+
+    .btn {
+      padding: 9px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover { background: var(--primary-hover); }
+
+    .btn-green {
+      background: var(--green);
+      color: white;
+    }
+
+    .btn-green:hover { background: var(--green-hover); }
+
+    .btn-ghost {
+      background: var(--bg);
+      border: 1.5px solid var(--border);
+      color: var(--text-muted);
+    }
+
+    .btn-ghost:hover { background: var(--border); color: var(--text); }
+
+    .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+
+    .btn-suggest {
+      background: #f3f4f6;
+      color: #6b7280;
+      border: 1px solid #e5e7eb;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .btn-suggest:hover { background: #fef3c7; color: #d97706; border-color: #fcd34d; }
+
+    /* ── ONLINE SUGGESTIONS PANEL ── */
+    .online-panel {
+      margin-top: 8px;
+      background: #fffbeb;
+      border: 1.5px solid #fde68a;
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+    }
+
+    .online-panel-header {
+      font-size: 0.78rem;
+      color: #92400e;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .online-suggestions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .online-pill {
+      background: var(--white);
+      border: 1.5px solid #fcd34d;
+      color: #78350f;
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .online-pill:hover {
+      background: #fef08a;
+      border-color: #f59e0b;
+    }
+
+    .loading-spinner {
+      font-size: 0.8rem;
+      color: #92400e;
+    }
+
+    /* ── FLOATING ACTION BUTTONS ── */
+    .fab-area {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 12px;
+      z-index: 100;
+    }
+
+    .fab {
+      padding: 14px 24px;
+      border-radius: 50px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+
+    .fab:active { transform: scale(0.97); }
+
+    .fab-share {
+      background: var(--primary);
+      color: white;
+    }
+
+    .fab-share:hover { background: var(--primary-hover); }
+
+    .fab-send {
+      background: var(--green);
+      color: white;
+    }
+
+    .fab-send:hover { background: var(--green-hover); }
+
+    /* ── MODAL ── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      z-index: 200;
+      padding: 20px;
+      backdrop-filter: blur(2px);
+    }
+
+    .modal-overlay.hidden { display: none; }
+
+    .modal {
+      background: var(--white);
+      border-radius: var(--radius) var(--radius) 0 0;
+      padding: 28px 24px 36px;
+      width: 100%;
+      max-width: 500px;
+      animation: slideUp 0.25s ease;
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(40px); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
+
+    .modal h2 {
+      font-size: 1.2rem;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .modal p {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+
+    .share-url-box {
+      background: var(--bg);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      font-size: 0.78rem;
+      word-break: break-all;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+      min-height: 50px;
+      line-height: 1.5;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .modal-actions .btn { flex: 1; text-align: center; }
+
+    /* ── TOAST ── */
+    #toast {
+      position: fixed;
+      bottom: 90px;
+      left: 50%;
+      transform: translateX(-50%) translateY(16px);
+      background: #1c1917;
+      color: #fff;
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 10px 20px;
+      border-radius: 50px;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 300;
+      transition: opacity 0.25s, transform 0.25s;
+      white-space: nowrap;
+    }
+
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ── EMPTY STATE ── */
+    .empty-meals {
+      font-size: 0.82rem;
+      color: #a8a29e;
+      padding: 6px 0 4px;
+      font-style: italic;
+    }
+
+    /* ── UTILS ── */
+    .no-meals-note {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 480px) {
+      .fab { padding: 12px 18px; font-size: 0.88rem; }
+      .container { padding: 14px 12px; }
+      .modal { padding: 22px 18px 30px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══ ADMIN VIEW ══════════════════════════════════════════════════ -->
+<div id="admin-view">
+  <header class="app-header">
+    <h1>🍽️ Veckans Mat</h1>
+    <div class="subtitle">Planera vad ni ska äta</div>
+    <span class="mode-badge badge-admin">Föräldraläge</span>
+  </header>
+
+  <div class="week-nav">
+    <button id="prev-week-btn" title="Föregående vecka">‹</button>
+    <span id="week-label">Laddar…</span>
+    <button id="next-week-btn" title="Nästa vecka">›</button>
+  </div>
+
+  <div class="container">
+    <div id="admin-days"></div>
+  </div>
+
+  <div class="fab-area">
+    <button class="fab fab-share" id="share-btn">
+      📤 Dela med barnen
+    </button>
+  </div>
+</div>
+
+<!-- ══ VOTE VIEW ══════════════════════════════════════════════════ -->
+<div id="vote-view" style="display:none">
+  <header class="app-header">
+    <h1>🗳️ Vad vill ni äta?</h1>
+    <div class="subtitle" id="vote-week-label"></div>
+    <span class="mode-badge badge-vote">Röstningsläge</span>
+  </header>
+
+  <div class="container">
+    <div class="voter-banner">
+      <p>Tryck på 👍 för det du vill äta, och lägg gärna till egna förslag!</p>
+      <div class="voter-input-row">
+        <input type="text" id="voter-name-input" placeholder="Ditt namn (t.ex. Emma)" maxlength="30" />
+      </div>
+    </div>
+    <div id="vote-days"></div>
+  </div>
+
+  <div class="fab-area">
+    <button class="fab fab-send" id="send-vote-btn">
+      💌 Skicka mina val
+    </button>
+  </div>
+</div>
+
+<!-- ══ RESPONSE VIEW ══════════════════════════════════════════════ -->
+<div id="response-view" style="display:none">
+  <header class="app-header">
+    <h1>💬 Matsvar</h1>
+    <div class="subtitle" id="resp-week-label"></div>
+    <span class="mode-badge badge-resp">Svar från barn</span>
+  </header>
+
+  <div class="container">
+    <div class="response-banner">
+      <h3 id="resp-voter-name"></h3>
+      <p>Markerade rätter är de hen röstade på.</p>
+      <div class="picks-summary" id="resp-summary"></div>
+    </div>
+    <div id="resp-days"></div>
+  </div>
+
+  <div class="fab-area">
+    <button class="fab fab-share" id="back-to-admin-btn" style="background:#6b7280;">
+      ← Tillbaka till planering
+    </button>
+  </div>
+</div>
+
+<!-- ══ SHARE MODAL ══════════════════════════════════════════════ -->
+<div class="modal-overlay hidden" id="share-modal">
+  <div class="modal">
+    <h2>📤 Dela med barnen</h2>
+    <p>Kopiera länken nedan och skicka den till barnen via t.ex. WhatsApp eller SMS. De kan sedan rösta och lägga till egna förslag.</p>
+    <div class="share-url-box" id="share-url-text"></div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="copy-share-btn">📋 Kopiera länk</button>
+      <button class="btn btn-ghost" id="close-share-modal">Stäng</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SEND VOTE MODAL ══════════════════════════════════════════ -->
+<div class="modal-overlay hidden" id="send-modal">
+  <div class="modal">
+    <h2>💌 Skicka mina val</h2>
+    <p>Kopiera länken och skicka till Papa/Mamma! De ser exakt vad du röstade på.</p>
+    <div class="share-url-box" id="send-url-text"></div>
+    <div class="modal-actions">
+      <button class="btn btn-green" id="copy-send-btn">📋 Kopiera länk</button>
+      <button class="btn btn-ghost" id="close-send-modal">Stäng</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ─── CONSTANTS ────────────────────────────────────────────────────
+const STORAGE_KEY = 'matlista_v1';
+const MEALDB_URL  = 'https://www.themealdb.com/api/json/v1/1/random.php';
+
+const DAYS_META = [
+  { name: 'Måndag',  emoji: '☀️',  hue: '#fff7ed' },
+  { name: 'Tisdag',  emoji: '🌟',  hue: '#fdf4ff' },
+  { name: 'Onsdag',  emoji: '🌈',  hue: '#f0fdf4' },
+  { name: 'Torsdag', emoji: '💫',  hue: '#eff6ff' },
+  { name: 'Fredag',  emoji: '🎉',  hue: '#fdf2f8' },
+  { name: 'Lördag',  emoji: '🏖️',  hue: '#fffbeb' },
+  { name: 'Söndag',  emoji: '❤️',  hue: '#fff1f2' },
+];
+
+// ─── STATE ────────────────────────────────────────────────────────
+let mode = 'admin';   // 'admin' | 'vote' | 'response'
+let plan = null;      // the week plan object
+let myPicks = {};     // dayIdx → Set of meal IDs (vote mode)
+let mySuggestions = {};// dayIdx → [{ id, name }] (vote mode)
+let responseData = null; // full parsed response object
+
+// ─── ENCODING ─────────────────────────────────────────────────────
+function encode(obj) {
+  try {
+    const str = JSON.stringify(obj);
+    return btoa(unescape(encodeURIComponent(str)));
+  } catch { return ''; }
+}
+
+function decode(str) {
+  try {
+    return JSON.parse(decodeURIComponent(escape(atob(str))));
+  } catch { return null; }
+}
+
+// ─── DATE HELPERS ─────────────────────────────────────────────────
+function getMonday(d) {
+  const date = new Date(d);
+  const day  = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diff);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function addDays(d, n) {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+}
+
+function isoDate(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+function svDate(str) {
+  const [y, m, d] = str.split('-');
+  const months = ['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'];
+  return `${parseInt(d)} ${months[parseInt(m) - 1]}`;
+}
+
+function weekNumber(d) {
+  const date  = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day   = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - day);
+  const year  = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  return Math.ceil((((date - year) / 86400000) + 1) / 7);
+}
+
+// ─── PLAN FACTORY ─────────────────────────────────────────────────
+function makePlan(mondayDate) {
+  return {
+    weekStart: isoDate(mondayDate),
+    days: DAYS_META.map((meta, i) => ({
+      idx:   i,
+      name:  meta.name,
+      emoji: meta.emoji,
+      hue:   meta.hue,
+      date:  isoDate(addDays(mondayDate, i)),
+      meals: [],
+    })),
+  };
+}
+
+function uid() {
+  return Math.random().toString(36).slice(2, 9);
+}
+
+// ─── PERSIST (admin) ──────────────────────────────────────────────
+function savePlan() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(plan));
+}
+
+function loadPlan() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
+// ─── ROUTING ──────────────────────────────────────────────────────
+function init() {
+  const hash = location.hash.slice(1);
+  if (hash) {
+    const data = decode(hash);
+    if (data && data.voter) {
+      // Response from a child
+      responseData = data;
+      mode = 'response';
+      showResponseView();
+      return;
+    }
+    if (data && data.weekStart) {
+      // Vote mode (shared plan link)
+      plan = data;
+      mode = 'vote';
+      showVoteView();
+      return;
+    }
+  }
+
+  // Admin mode
+  mode = 'admin';
+  plan = loadPlan();
+  if (!plan) plan = makePlan(getMonday(new Date()));
+  showAdminView();
+}
+
+// ─── ADMIN VIEW ───────────────────────────────────────────────────
+function showAdminView() {
+  document.getElementById('admin-view').style.display = '';
+  document.getElementById('vote-view').style.display  = 'none';
+  document.getElementById('response-view').style.display = 'none';
+  renderAdmin();
+}
+
+function renderAdmin() {
+  const monday = new Date(plan.weekStart + 'T12:00:00');
+  const sunday = addDays(monday, 6);
+  const wn     = weekNumber(monday);
+  document.getElementById('week-label').textContent =
+    `Vecka ${wn} · ${svDate(plan.weekStart)}–${svDate(isoDate(sunday))}`;
+
+  const container = document.getElementById('admin-days');
+  container.innerHTML = '';
+
+  plan.days.forEach((day, di) => {
+    const card = document.createElement('div');
+    card.className = 'day-card';
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'day-header';
+    header.style.background = day.hue;
+    header.innerHTML = `
+      <span class="day-emoji">${day.emoji}</span>
+      <div class="day-header-text">
+        <div class="day-name">${day.name}</div>
+        <div class="day-date">${svDate(day.date)}</div>
+      </div>
+    `;
+    card.appendChild(header);
+
+    // Body
+    const body = document.createElement('div');
+    body.className = 'day-body';
+
+    // Meal list
+    const list = document.createElement('ul');
+    list.className = 'meal-list';
+    if (day.meals.length === 0) {
+      list.innerHTML = '<li class="empty-meals">Inga förslag ännu…</li>';
+    } else {
+      day.meals.forEach((meal, mi) => {
+        const li = document.createElement('li');
+        li.className = 'meal-item';
+        li.innerHTML = `
+          <span class="meal-name">${escHtml(meal.name)}</span>
+          <span class="meal-by">${escHtml(meal.by || '')}</span>
+          <button class="del-btn" title="Ta bort" onclick="deleteMeal(${di},${mi})">✕</button>
+        `;
+        list.appendChild(li);
+      });
+    }
+    body.appendChild(list);
+
+    // Add meal row
+    const addRow = document.createElement('div');
+    addRow.className = 'add-meal-row';
+    addRow.innerHTML = `
+      <input type="text" placeholder="Lägg till rätt…" id="meal-input-${di}" maxlength="60" />
+      <button class="btn btn-primary btn-sm" onclick="addMeal(${di})">+ Lägg till</button>
+      <button class="btn-suggest" onclick="fetchSuggestions(${di})" title="Hämta förslag från internet">🌐 Förslag</button>
+    `;
+    body.appendChild(addRow);
+
+    // Suggestions panel placeholder
+    const sugPanel = document.createElement('div');
+    sugPanel.id = `sug-panel-${di}`;
+    body.appendChild(sugPanel);
+
+    // Enter key on input
+    addRow.querySelector('input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') addMeal(di);
+    });
+
+    card.appendChild(body);
+    container.appendChild(card);
+  });
+}
+
+function addMeal(di) {
+  const input = document.getElementById(`meal-input-${di}`);
+  const name  = input.value.trim();
+  if (!name) return;
+  plan.days[di].meals.push({ id: uid(), name, by: 'Papa' });
+  savePlan();
+  input.value = '';
+  renderAdmin();
+  document.getElementById(`meal-input-${di}`).focus();
+}
+
+function deleteMeal(di, mi) {
+  plan.days[di].meals.splice(mi, 1);
+  savePlan();
+  renderAdmin();
+}
+
+// Week navigation
+document.getElementById('prev-week-btn').addEventListener('click', () => {
+  const mon = getMonday(new Date(plan.weekStart + 'T12:00:00'));
+  mon.setDate(mon.getDate() - 7);
+  plan = makePlan(mon);
+  const stored = loadPlan();
+  if (stored && stored.weekStart === isoDate(mon)) plan = stored;
+  savePlan();
+  renderAdmin();
+});
+
+document.getElementById('next-week-btn').addEventListener('click', () => {
+  const mon = getMonday(new Date(plan.weekStart + 'T12:00:00'));
+  mon.setDate(mon.getDate() + 7);
+  plan = makePlan(mon);
+  const stored = loadPlan();
+  if (stored && stored.weekStart === isoDate(mon)) plan = stored;
+  savePlan();
+  renderAdmin();
+});
+
+// Share
+document.getElementById('share-btn').addEventListener('click', () => {
+  const url = location.origin + location.pathname + '#' + encode(plan);
+  document.getElementById('share-url-text').textContent = url;
+  document.getElementById('share-modal').classList.remove('hidden');
+});
+
+document.getElementById('copy-share-btn').addEventListener('click', () => {
+  const url = document.getElementById('share-url-text').textContent;
+  copyToClipboard(url, 'Länk kopierad! 🎉');
+});
+
+document.getElementById('close-share-modal').addEventListener('click', () => {
+  document.getElementById('share-modal').classList.add('hidden');
+});
+
+// ─── VOTE VIEW ────────────────────────────────────────────────────
+function showVoteView() {
+  document.getElementById('admin-view').style.display  = 'none';
+  document.getElementById('vote-view').style.display   = '';
+  document.getElementById('response-view').style.display = 'none';
+
+  // Init picks and suggestions
+  plan.days.forEach((_, i) => {
+    myPicks[i]       = new Set();
+    mySuggestions[i] = [];
+  });
+
+  const monday = new Date(plan.weekStart + 'T12:00:00');
+  const sunday = addDays(monday, 6);
+  const wn     = weekNumber(monday);
+  document.getElementById('vote-week-label').textContent =
+    `Vecka ${wn} · ${svDate(plan.weekStart)}–${svDate(isoDate(sunday))}`;
+
+  renderVote();
+}
+
+function renderVote() {
+  const container = document.getElementById('vote-days');
+  container.innerHTML = '';
+
+  plan.days.forEach((day, di) => {
+    const card = document.createElement('div');
+    card.className = 'day-card';
+
+    const header = document.createElement('div');
+    header.className = 'day-header';
+    header.style.background = day.hue;
+    header.innerHTML = `
+      <span class="day-emoji">${day.emoji}</span>
+      <div class="day-header-text">
+        <div class="day-name">${day.name}</div>
+        <div class="day-date">${svDate(day.date)}</div>
+      </div>
+    `;
+    card.appendChild(header);
+
+    const body = document.createElement('div');
+    body.className = 'day-body';
+
+    const list = document.createElement('ul');
+    list.className = 'meal-list';
+
+    const allMeals = [
+      ...day.meals,
+      ...(mySuggestions[di] || []),
+    ];
+
+    if (allMeals.length === 0) {
+      list.innerHTML = '<li class="empty-meals">Inga förslag — lägg till ett eget!</li>';
+    } else {
+      allMeals.forEach(meal => {
+        const voted = myPicks[di].has(meal.id);
+        const li = document.createElement('li');
+        li.className = 'meal-item';
+        li.innerHTML = `
+          <button class="vote-btn ${voted ? 'voted' : ''}" onclick="togglePick(${di},'${meal.id}')" title="${voted ? 'Avrösta' : 'Rösta'}">
+            ${voted ? '✓' : '👍'}
+          </button>
+          <span class="meal-name">${escHtml(meal.name)}</span>
+          <span class="meal-by">${escHtml(meal.by === 'Papa' ? '(Papa)' : meal.by ? `(${meal.by})` : '')}</span>
+        `;
+        list.appendChild(li);
+      });
+    }
+    body.appendChild(list);
+
+    // Add own suggestion
+    const addRow = document.createElement('div');
+    addRow.className = 'add-meal-row';
+    addRow.innerHTML = `
+      <input type="text" placeholder="Eget förslag…" id="vote-input-${di}" maxlength="60" />
+      <button class="btn btn-ghost btn-sm" onclick="addVoteSuggestion(${di})">+ Förslag</button>
+    `;
+    addRow.querySelector('input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') addVoteSuggestion(di);
+    });
+    body.appendChild(addRow);
+
+    card.appendChild(body);
+    container.appendChild(card);
+  });
+}
+
+function togglePick(di, mealId) {
+  if (myPicks[di].has(mealId)) {
+    myPicks[di].delete(mealId);
+  } else {
+    myPicks[di].add(mealId);
+  }
+  renderVote();
+}
+
+function addVoteSuggestion(di) {
+  const input = document.getElementById(`vote-input-${di}`);
+  const name  = input.value.trim();
+  if (!name) return;
+  const voterName = document.getElementById('voter-name-input').value.trim() || 'Barn';
+  const meal = { id: uid(), name, by: voterName };
+  mySuggestions[di].push(meal);
+  myPicks[di].add(meal.id);
+  input.value = '';
+  renderVote();
+}
+
+// Send votes
+document.getElementById('send-vote-btn').addEventListener('click', () => {
+  const voterName = document.getElementById('voter-name-input').value.trim() || 'Barn';
+
+  // Build picks array (all meal IDs selected)
+  const allPicks = [];
+  Object.keys(myPicks).forEach(di => {
+    myPicks[di].forEach(id => allPicks.push(id));
+  });
+
+  // Build combined plan with suggestions included
+  const planWithSuggestions = {
+    ...plan,
+    days: plan.days.map((day, di) => ({
+      ...day,
+      meals: [
+        ...day.meals,
+        ...(mySuggestions[di] || []),
+      ],
+    })),
+    voter: voterName,
+    picks: allPicks,
+  };
+
+  const url = location.origin + location.pathname + '#' + encode(planWithSuggestions);
+  document.getElementById('send-url-text').textContent = url;
+  document.getElementById('send-modal').classList.remove('hidden');
+});
+
+document.getElementById('copy-send-btn').addEventListener('click', () => {
+  const url = document.getElementById('send-url-text').textContent;
+  copyToClipboard(url, `Tack ${document.getElementById('voter-name-input').value.trim() || ''}! Länk kopierad 💌`);
+});
+
+document.getElementById('close-send-modal').addEventListener('click', () => {
+  document.getElementById('send-modal').classList.add('hidden');
+});
+
+// ─── RESPONSE VIEW ────────────────────────────────────────────────
+function showResponseView() {
+  document.getElementById('admin-view').style.display   = 'none';
+  document.getElementById('vote-view').style.display    = 'none';
+  document.getElementById('response-view').style.display = '';
+
+  const data   = responseData;
+  const picksSet = new Set(data.picks || []);
+  const voter  = data.voter || 'Barn';
+
+  const monday = new Date(data.weekStart + 'T12:00:00');
+  const sunday = addDays(monday, 6);
+  const wn     = weekNumber(monday);
+  document.getElementById('resp-week-label').textContent =
+    `Vecka ${wn} · ${svDate(data.weekStart)}–${svDate(isoDate(sunday))}`;
+  document.getElementById('resp-voter-name').textContent = `${voter}s matsval`;
+
+  // Summary of picks
+  const summary = document.getElementById('resp-summary');
+  summary.innerHTML = '';
+  const pickedMeals = [];
+  (data.days || []).forEach(day => {
+    (day.meals || []).forEach(meal => {
+      if (picksSet.has(meal.id)) pickedMeals.push(meal.name);
+    });
+  });
+  if (pickedMeals.length === 0) {
+    summary.innerHTML = '<span style="color:#6b7280;font-size:0.85rem">Inga röster registrerades.</span>';
+  } else {
+    pickedMeals.forEach(name => {
+      const pill = document.createElement('span');
+      pill.className = 'pick-pill';
+      pill.textContent = name;
+      summary.appendChild(pill);
+    });
+  }
+
+  // Day cards
+  const container = document.getElementById('resp-days');
+  container.innerHTML = '';
+
+  (data.days || []).forEach(day => {
+    const card = document.createElement('div');
+    card.className = 'day-card';
+
+    const header = document.createElement('div');
+    header.className = 'day-header';
+    header.style.background = day.hue || '#f5f5f5';
+    header.innerHTML = `
+      <span class="day-emoji">${day.emoji || '🍽️'}</span>
+      <div class="day-header-text">
+        <div class="day-name">${day.name}</div>
+        <div class="day-date">${svDate(day.date)}</div>
+      </div>
+    `;
+    card.appendChild(header);
+
+    const body = document.createElement('div');
+    body.className = 'day-body';
+    const list = document.createElement('ul');
+    list.className = 'meal-list';
+
+    if ((day.meals || []).length === 0) {
+      list.innerHTML = '<li class="empty-meals">Inga förslag</li>';
+    } else {
+      day.meals.forEach(meal => {
+        const picked = picksSet.has(meal.id);
+        const li = document.createElement('li');
+        li.className = 'meal-item' + (picked ? ' picked' : '');
+        li.innerHTML = `
+          <span style="font-size:1.1rem">${picked ? '✅' : '⬜'}</span>
+          <span class="meal-name">${escHtml(meal.name)}</span>
+          <span class="meal-by">${escHtml(meal.by && meal.by !== 'Papa' ? `(${meal.by})` : '')}</span>
+        `;
+        list.appendChild(li);
+      });
+    }
+    body.appendChild(list);
+    card.appendChild(body);
+    container.appendChild(card);
+  });
+}
+
+document.getElementById('back-to-admin-btn').addEventListener('click', () => {
+  location.hash = '';
+  location.reload();
+});
+
+// ─── ONLINE SUGGESTIONS (TheMealDB) ──────────────────────────────
+async function fetchSuggestions(di) {
+  const panelId = `sug-panel-${di}`;
+  const panel   = document.getElementById(panelId);
+  panel.innerHTML = `
+    <div class="online-panel">
+      <div class="online-panel-header">🌐 Hämtar förslag…</div>
+      <div class="loading-spinner">⏳ Laddar…</div>
+    </div>
+  `;
+
+  try {
+    // Fetch 4 random meals in parallel
+    const fetches = [1, 2, 3, 4].map(() =>
+      fetch(MEALDB_URL).then(r => r.json())
+    );
+    const results = await Promise.all(fetches);
+    const names   = [...new Set(results.map(r => r.meals?.[0]?.strMeal).filter(Boolean))];
+
+    panel.innerHTML = `
+      <div class="online-panel">
+        <div class="online-panel-header">🌐 Förslag från nätet — klicka för att lägga till:</div>
+        <div class="online-suggestions" id="sug-pills-${di}"></div>
+      </div>
+    `;
+
+    const pillsContainer = document.getElementById(`sug-pills-${di}`);
+    names.forEach(name => {
+      const btn = document.createElement('button');
+      btn.className = 'online-pill';
+      btn.textContent = name;
+      btn.addEventListener('click', () => {
+        const mealInput = document.getElementById(`meal-input-${di}`);
+        mealInput.value = name;
+        panel.innerHTML = '';
+        addMeal(di);
+      });
+      pillsContainer.appendChild(btn);
+    });
+
+    // Refresh button
+    const refresh = document.createElement('button');
+    refresh.className = 'online-pill';
+    refresh.textContent = '🔄 Fler förslag';
+    refresh.style.background = '#fef9c3';
+    refresh.addEventListener('click', () => fetchSuggestions(di));
+    pillsContainer.appendChild(refresh);
+
+  } catch {
+    panel.innerHTML = `
+      <div class="online-panel">
+        <div class="online-panel-header">⚠️ Kunde inte hämta förslag just nu</div>
+      </div>
+    `;
+  }
+}
+
+// ─── UTILITIES ────────────────────────────────────────────────────
+function escHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function copyToClipboard(text, successMsg) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => showToast(successMsg));
+  } else {
+    // Fallback for older browsers
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity  = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast(successMsg);
+  }
+}
+
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// Close modals on overlay click
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) overlay.classList.add('hidden');
+  });
+});
+
+// ─── BOOT ─────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
