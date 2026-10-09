@@ -228,7 +228,7 @@ details.more[open] > summary { margin-bottom: 8px; }
   <div class="wrap">
     <div class="brand">
       <h1>Resekompassen</h1>
-      <p>Flyg, boende och evenemang utifrån dina ledigheter och intressen</p>
+      <p>Flyg, boende och evenemang utifrån dina ledigheter och intressen · <span class="mono" id="appVersion">v8</span></p>
     </div>
     <div class="flap" id="flap" aria-label="Aktuell rutt"></div>
   </div>
@@ -393,10 +393,15 @@ details.more[open] > summary { margin-bottom: 8px; }
 </main>
 
 <div class="toast" id="toast" hidden></div>
+<div id="errBar" role="alert" hidden style="position:fixed;left:8px;right:8px;top:calc(8px + env(safe-area-inset-top, 0px));z-index:30;background:var(--bad);color:#fff;padding:10px 12px;border-radius:8px;font-size:.85rem;overflow-wrap:anywhere"></div>
 
 <script>
 (() => {
 "use strict";
+// Visa fel synligt, så att de går att skärmdumpa på telefonen.
+const showErr = msg => { const b = document.getElementById("errBar"); if (!b) return; b.hidden = false; b.textContent = "Fel (v8): " + String(msg).slice(0, 300) + " · Ta en skärmdump och skicka till Claude."; };
+window.addEventListener("error", e => showErr(e.message || e.error || "okänt fel"));
+window.addEventListener("unhandledrejection", e => { const r = e.reason; if (r && (r.code === "cancelled")) return; showErr((r && (r.message || r.code)) || r || "okänt fel"); });
 
 /* ---------- Hjälpare ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1903,22 +1908,29 @@ document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () =>
 // Mobilappens visningsruta kan blockera formulärskick helt (submit-händelsen avfyras aldrig),
 // så alla knappar är vanliga knappar med klickhanterare. Formulären stoppas bara från att skickas.
 document.querySelectorAll("form").forEach(f => f.addEventListener("submit", e => e.preventDefault()));
-$("#planBtn").addEventListener("click", runPlan);
+// Klick plus pointerup som reserv: vissa inbäddade vyer levererar inte click på knappar.
+function onTap(el, fn) {
+  let last = 0;
+  const run = e => { const now = Date.now(); if (now - last < 600) return; last = now; try { const r = fn(e); if (r && r.catch) r.catch(err => showErr(err?.message || err?.code || err)); } catch (err) { showErr(err?.message || err); } };
+  el.addEventListener("click", run);
+  el.addEventListener("pointerup", e => { if (e.pointerType !== "mouse") setTimeout(() => run(e), 350); });
+}
+onTap($("#planBtn"), runPlan);
 $("#planStop").addEventListener("click", () => planCtl?.abort());
 ["#pDest", "#pFrom", "#pTo"].forEach(s => $(s).addEventListener("input", updatePlanLinks));
 $("#pDest").addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); runPlan(); } });
-$("#discBtn").addEventListener("click", runDiscover);
+onTap($("#discBtn"), runDiscover);
 $("#discStop").addEventListener("click", () => discCtl?.abort());
 $("#dPeriod").addEventListener("change", applyPeriod);
 ["#dFrom", "#dTo"].forEach(s => $(s).addEventListener("input", () => ($("#dPeriod").value = "custom")));
-$("#leaveAdd").addEventListener("click", () => {
+onTap($("#leaveAdd"), () => {
   const from = $("#lFrom").value, to = $("#lTo").value;
   if (!(validIso(from) && validIso(to) && to >= from)) { toast("Välj start- och slutdatum. Slutdatum måste vara efter startdatum."); return; }
   addLeave({ label: $("#lLabel").value.trim(), from, to });
   $("#lLabel").value = ""; $("#lFrom").value = ""; $("#lTo").value = "";
 });
-$("#profSave").addEventListener("click", saveProfile);
-$("#chatSend").addEventListener("click", sendChat);
+onTap($("#profSave"), saveProfile);
+onTap($("#chatSend"), sendChat);
 $("#chatStop").addEventListener("click", () => chatCtl?.abort());
 $("#chatInput").addEventListener("input", autoGrow);
 $("#chatInput").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(); } });
