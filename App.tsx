@@ -1,32 +1,75 @@
 import 'react-native-gesture-handler';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
+import * as Notifications from 'expo-notifications';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { StatusBar } from 'expo-status-bar';
 
-import { getDb } from './src/database';
+import { getDb, getActiveSession } from './src/database';
+import { setupNotifications } from './src/utils/notify';
 import { ensureExerciseLibraries } from './src/data/seed';
 import AppNavigator from './src/navigation/AppNavigator';
+import type { RootStackParamList } from './src/navigation/AppNavigator';
 import { COLORS } from './src/theme';
 
 type InitState = 'loading' | 'syncing' | 'ready' | 'error';
+
+const navigationRef = createNavigationContainerRef<RootStackParamList>();
+
+// A tapped training reminder opens its workout (or the unfinished one, if any)
+async function openFromReminder(data: Record<string, unknown>) {
+  if (!navigationRef.isReady()) return;
+  const active = await getActiveSession();
+  if (active) {
+    navigationRef.navigate('ActiveWorkout', {
+      sessionId: active.id,
+      sessionName: active.template_name ?? 'Fritt pass',
+    });
+    return;
+  }
+  const templateId = typeof data.templateId === 'number' ? data.templateId : undefined;
+  navigationRef.navigate('ActiveWorkout', {
+    templateId,
+    sessionName: typeof data.templateName === 'string' ? data.templateName : 'Fritt pass',
+  });
+}
 
 export default function App() {
   const [initState, setInitState] = useState<InitState>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const handledResponse = useRef<string | null>(null);
+  const pendingReminder = useRef<Record<string, unknown> | null>(null);
+
   useEffect(() => {
     init();
   }, []);
+
+  // Handle taps on training reminders (also when the app was started by the tap)
+  useEffect(() => {
+    if (initState !== 'ready') return;
+    const handle = (r: Notifications.NotificationResponse | null) => {
+      if (!r || handledResponse.current === r.notification.request.identifier + r.notification.date) return;
+      handledResponse.current = r.notification.request.identifier + r.notification.date;
+      const data = (r.notification.request.content.data ?? {}) as Record<string, unknown>;
+      if (data.kind !== 'reminder') return;
+      if (navigationRef.isReady()) openFromReminder(data);
+      else pendingReminder.current = data;
+    };
+    Notifications.getLastNotificationResponseAsync().then(handle);
+    const sub = Notifications.addNotificationResponseReceivedListener(handle);
+    return () => sub.remove();
+  }, [initState]);
 
   async function init() {
     try {
       await getDb();
       setInitState('syncing');
       await ensureExerciseLibraries();
+      await setupNotifications().catch(() => undefined);
       setInitState('ready');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -75,6 +118,13 @@ export default function App() {
     <SafeAreaProvider>
     <KeyboardProvider>
       <NavigationContainer
+        ref={navigationRef}
+        onReady={() => {
+          if (pendingReminder.current) {
+            openFromReminder(pendingReminder.current);
+            pendingReminder.current = null;
+          }
+        }}
         theme={{
           dark: true,
           colors: {

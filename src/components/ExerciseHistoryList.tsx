@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS } from '../theme';
 import { getExerciseHistory } from '../database';
 import type { ExerciseHistoryEntry } from '../database';
-import { fmtKg, fmtRelativeDate, fmtSet } from '../utils/format';
+import { fmtDuration, fmtKg, fmtRelativeDate, fmtSet } from '../utils/format';
 
 interface Props {
   exerciseId: string;
@@ -39,12 +39,14 @@ export default function ExerciseHistoryList({ exerciseId, limit = 20 }: Props) {
   }
 
   const allSets = history.flatMap(h => h.sets);
+  const timeSets = allSets.filter(x => x.is_time);
+  const longest = Math.max(0, ...timeSets.map(x => x.reps ?? 0));
   const maxWeight = Math.max(0, ...allSets.map(x => x.weight_kg ?? 0));
   const maxReps = Math.max(0, ...allSets.map(x => x.reps ?? 0));
   // Epley estimate of one-rep max
   const est1rm = Math.max(
     0,
-    ...allSets.map(x => (x.weight_kg && x.reps ? x.weight_kg * (1 + x.reps / 30) : 0))
+    ...allSets.map(x => (!x.is_time && x.weight_kg && x.reps ? x.weight_kg * (1 + x.reps / 30) : 0))
   );
 
   return (
@@ -52,7 +54,8 @@ export default function ExerciseHistoryList({ exerciseId, limit = 20 }: Props) {
       <View style={s.prRow}>
         {maxWeight > 0 && <Pr label="Tyngsta" value={`${fmtKg(maxWeight)} kg`} />}
         {est1rm > 0 && <Pr label="Uppsk. 1RM" value={`${Math.round(est1rm)} kg`} />}
-        {maxWeight === 0 && maxReps > 0 && <Pr label="Flest reps" value={String(maxReps)} />}
+        {longest > 0 && <Pr label="Längsta tid" value={fmtDuration(longest)} />}
+        {maxWeight === 0 && longest === 0 && maxReps > 0 && <Pr label="Flest reps" value={String(maxReps)} />}
         <Pr label="Antal pass" value={String(history.length)} />
       </View>
 

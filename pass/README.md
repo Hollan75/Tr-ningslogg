@@ -33,7 +33,8 @@ Historiken påverkas inte.
 | `namn` | ja | – | Passets namn |
 | `övning` | ja | – | Övningens namn som det står i appen (stora/små bokstäver spelar ingen roll) |
 | `set` | nej | 3 | Antal set |
-| `reps` | nej | 10 | Reps per set (för tidsövningar: sekunder) |
+| `reps` | nej | 10 | Reps per set |
+| `sek` | nej | – | Sekunder per set – gör övningen tidsbaserad med timer (t.ex. plankan `"sek": 45`) |
 | `kg` | nej | 0 | Startvikt |
 | `vila` | nej | 90 | Vila i sekunder |
 

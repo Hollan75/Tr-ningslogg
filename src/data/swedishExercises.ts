@@ -3,7 +3,7 @@ import type { Exercise } from '../types';
 // Curated Swedish exercise library – functional strength with extra focus on
 // shoulder stability (rotator cuff/scapula), knees and glutes/hip stability.
 // Bump SWEDISH_LIBRARY_VERSION when entries change so installed apps re-sync.
-export const SWEDISH_LIBRARY_VERSION = '1';
+export const SWEDISH_LIBRARY_VERSION = '2';
 
 type Level = 'Nybörjare' | 'Medel' | 'Avancerad';
 
@@ -612,6 +612,28 @@ const RAW: Raw[] = [
   ]],
 ];
 
+// Exercises logged in seconds instead of reps (holds, carries, stretches, cardio)
+const TIME_BASED = new Set([
+  'se_spansk_knaboj',
+  'se_vaggsittning',
+  'se_copenhagen',
+  'se_bottoms_up',
+  'se_dead_hang',
+  'se_planka',
+  'se_sidoplanka',
+  'se_farmers_walk',
+  'se_resvaska',
+  'se_hollow_hold',
+  'se_hoftbojarstretch',
+  'se_duvan',
+  'se_hamstring_band',
+  'se_foamroller_lar',
+  'se_roddmaskin',
+  'se_cykel',
+  'se_skierg',
+  'se_slade',
+]);
+
 export function loadSwedishExercises(): Exercise[] {
   return RAW.map(([id, name, group, primary, secondary, equipment, category, level, steps]) => ({
     id,
@@ -624,5 +646,6 @@ export function loadSwedishExercises(): Exercise[] {
     gifUrl: null,
     instructions: steps.join('; '),
     difficulty: level,
+    measure: TIME_BASED.has(id) ? 'time' : 'reps',
   }));
 }

@@ -16,6 +16,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { COLORS, RADIUS } from '../theme';
 import { getSessionById, getSessionSets } from '../database';
 import type { WorkoutSession, SessionSet } from '../types';
+import { fmtDuration } from '../utils/format';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 
 type RouteP = RouteProp<RootStackParamList, 'SessionDetail'>;
@@ -145,7 +146,7 @@ export default function SessionDetailScreen() {
               <Text style={s.exName}>{group.name}</Text>
               <View style={s.setsHeader}>
                 <Text style={[s.col, s.colNum]}>Set</Text>
-                <Text style={[s.col, s.colVal]}>Reps</Text>
+                <Text style={[s.col, s.colVal]}>Reps/tid</Text>
                 <Text style={[s.col, s.colVal]}>Vikt</Text>
                 <Text style={[s.col, s.colTag]}>Typ</Text>
               </View>
@@ -153,7 +154,7 @@ export default function SessionDetailScreen() {
                 <View key={set.id} style={s.setRow}>
                   <Text style={[s.col, s.colNum, s.rowText]}>{set.set_number}</Text>
                   <Text style={[s.col, s.colVal, s.rowText]}>
-                    {set.reps != null ? `${set.reps}` : '—'}
+                    {set.is_time ? fmtDuration(set.reps) : set.reps != null ? `${set.reps}` : '—'}
                   </Text>
                   <Text style={[s.col, s.colVal, s.rowText]}>
                     {set.weight_kg != null ? `${set.weight_kg} kg` : '—'}

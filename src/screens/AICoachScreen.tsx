@@ -35,7 +35,11 @@ function summarizeSets(sets: SessionSet[]): string[] {
   const byExercise = new Map<string, string[]>();
   for (const set of sets) {
     const name = set.exercise_name ?? set.exercise_id;
-    const entry = set.weight_kg ? `${set.weight_kg}kg×${set.reps ?? '?'}` : `${set.reps ?? '?'} reps`;
+    const entry = set.is_time
+      ? `${set.weight_kg ? `${set.weight_kg}kg ` : ''}${set.reps ?? '?'}s`
+      : set.weight_kg
+      ? `${set.weight_kg}kg×${set.reps ?? '?'}`
+      : `${set.reps ?? '?'} reps`;
     byExercise.set(name, [...(byExercise.get(name) ?? []), entry]);
   }
   return [...byExercise.entries()].map(([name, list]) => `${name}: ${list.join(', ')}`);

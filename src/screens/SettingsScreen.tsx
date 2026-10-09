@@ -165,6 +165,18 @@ export default function SettingsScreen() {
         </View>
 
         {/* About */}
+        <Text style={s.sectionLabel}>PÅMINNELSER</Text>
+        <View style={s.card}>
+          <TouchableOpacity style={s.infoRow} onPress={() => navigation.navigate('Schedule' as never)}>
+            <Ionicons name="alarm-outline" size={20} color={COLORS.accent} />
+            <View style={s.infoText}>
+              <Text style={s.infoTitle}>Träningsschema</Text>
+              <Text style={s.infoSub}>Dagar, tider och pass med notiser</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+          </TouchableOpacity>
+        </View>
+
         <Text style={s.sectionLabel}>PASS FRÅN DATORN</Text>
         <View style={s.card}>
           <View style={s.infoRow}>

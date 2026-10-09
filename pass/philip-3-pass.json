@@ -24,7 +24,7 @@
         { "övning": "Rumänska marklyft", "set": 3, "reps": 8, "kg": 40, "vila": 90 },
         { "övning": "Y-T-W på lutande bänk", "set": 2, "reps": 8, "vila": 45 },
         { "övning": "Dead bug", "set": 3, "reps": 8, "vila": 30 },
-        { "övning": "Resväskebärning (en hand)", "set": 2, "reps": 30, "kg": 16, "vila": 45 }
+        { "övning": "Resväskebärning (en hand)", "set": 2, "sek": 30, "kg": 16, "vila": 45 }
       ]
     },
     {
@@ -36,9 +36,9 @@
         { "övning": "Hantelpress på bänk", "set": 3, "reps": 10, "kg": 16, "vila": 90 },
         { "övning": "Enbens-marklyft med hantel", "set": 3, "reps": 8, "kg": 10, "vila": 60 },
         { "övning": "TRX-rodd", "set": 3, "reps": 12, "vila": 60 },
-        { "övning": "Copenhagen-planka (kort hävarm)", "set": 2, "reps": 20, "vila": 45 },
-        { "övning": "Sidoplanka", "set": 2, "reps": 30, "vila": 30 },
-        { "övning": "Bondgång (farmer's walk)", "set": 3, "reps": 40, "kg": 20, "vila": 60 }
+        { "övning": "Copenhagen-planka (kort hävarm)", "set": 2, "sek": 20, "vila": 45 },
+        { "övning": "Sidoplanka", "set": 2, "sek": 30, "vila": 30 },
+        { "övning": "Bondgång (farmer's walk)", "set": 3, "sek": 40, "kg": 20, "vila": 60 }
       ]
     }
   ]

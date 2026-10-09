@@ -35,6 +35,7 @@ interface DraftExercise {
   reps: string;
   weight: string;
   rest: string;
+  mode: 'reps' | 'time';
   lastTime: string | null;
 }
 
@@ -74,6 +75,7 @@ export default function CreateTemplateScreen() {
             reps: String(e.reps_min),
             weight: e.weight_kg ? String(e.weight_kg) : '',
             rest: String(e.rest_seconds || 90),
+            mode: (e.mode ?? e.measure ?? 'reps') as 'reps' | 'time',
             lastTime: prev[0] ? fmtSet(prev[0]) : null,
           };
         })
@@ -109,6 +111,7 @@ export default function CreateTemplateScreen() {
     setShowPicker(false);
     const prev = await getPreviousPerformance(exercise.id, -1);
     const p = prev[0];
+    const mode = exercise.measure === 'time' ? 'time' : 'reps';
     change(list => [
       ...list,
       {
@@ -117,12 +120,23 @@ export default function CreateTemplateScreen() {
         name: exercise.name,
         bodyPart: exercise.bodyPart,
         sets: String(Math.max(prev.length, 3)),
-        reps: p?.reps ? String(p.reps) : '10',
+        reps: p?.reps ? String(p.reps) : mode === 'time' ? '30' : '10',
+        mode,
         weight: p?.weight_kg ? String(p.weight_kg) : '',
         rest: '90',
         lastTime: p ? fmtSet(p) : null,
       },
     ]);
+  }
+
+  function toggleMode(key: string) {
+    change(list =>
+      list.map(e =>
+        e.key === key
+          ? { ...e, mode: e.mode === 'time' ? 'reps' : 'time', reps: e.mode === 'time' ? '10' : '30' }
+          : e
+      )
+    );
   }
 
   function updateField(key: string, field: 'sets' | 'reps' | 'weight' | 'rest', value: string) {
@@ -159,6 +173,7 @@ export default function CreateTemplateScreen() {
           reps: Math.max(1, Math.round(parseNum(e.reps) ?? 10)),
           weightKg: Math.max(0, parseNum(e.weight) ?? 0),
           restSeconds: Math.max(0, Math.round(parseNum(e.rest) ?? 90)),
+          mode: e.mode,
         }))
       );
       saved.current = true;
@@ -244,9 +259,32 @@ export default function CreateTemplateScreen() {
                   </TouchableOpacity>
                 </View>
 
+                <View style={s.modeRow}>
+                  {(['reps', 'time'] as const).map(m => (
+                    <TouchableOpacity
+                      key={m}
+                      style={[s.modeBtn, ex.mode === m && s.modeBtnActive]}
+                      onPress={() => ex.mode !== m && toggleMode(ex.key)}
+                    >
+                      <Ionicons
+                        name={m === 'time' ? 'timer-outline' : 'repeat'}
+                        size={14}
+                        color={ex.mode === m ? COLORS.text : COLORS.textMuted}
+                      />
+                      <Text style={[s.modeText, ex.mode === m && s.modeTextActive]}>
+                        {m === 'time' ? 'Tid' : 'Reps'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
                 <View style={s.configRow}>
                   <ConfigField label="Set" value={ex.sets} onChange={v => updateField(ex.key, 'sets', v)} />
-                  <ConfigField label="Reps" value={ex.reps} onChange={v => updateField(ex.key, 'reps', v)} />
+                  <ConfigField
+                    label={ex.mode === 'time' ? 'Sek' : 'Reps'}
+                    value={ex.reps}
+                    onChange={v => updateField(ex.key, 'reps', v)}
+                  />
                   <ConfigField label="Kg" value={ex.weight} placeholder="–" onChange={v => updateField(ex.key, 'weight', v)} decimal />
                   <ConfigField label="Vila s" value={ex.rest} onChange={v => updateField(ex.key, 'rest', v)} />
                 </View>
@@ -377,6 +415,25 @@ const s = StyleSheet.create({
   },
 
   configRow: { flexDirection: 'row', gap: 8 },
+  modeRow: {
+    flexDirection: 'row',
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.surface2,
+    borderRadius: RADIUS.full,
+    padding: 3,
+    marginBottom: 10,
+  },
+  modeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: RADIUS.full,
+  },
+  modeBtnActive: { backgroundColor: COLORS.border },
+  modeText: { color: COLORS.textMuted, fontSize: 12, fontWeight: '700' },
+  modeTextActive: { color: COLORS.text },
   configField: { flex: 1 },
   configLabel: {
     color: COLORS.textMuted,

@@ -23,8 +23,19 @@ export function fmtKg(kg: number | null | undefined): string {
   return `${Number.isInteger(kg) ? kg : kg.toFixed(1).replace(/\.0$/, '')}`;
 }
 
-// "40 kg × 10" / "× 10" when no weight
-export function fmtSet(set: Pick<SessionSet, 'reps' | 'weight_kg'>): string {
+// 45 → "45 s", 90 → "1:30 min"
+export function fmtDuration(seconds: number | null | undefined): string {
+  if (seconds == null) return '—';
+  if (seconds < 60) return `${seconds} s`;
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} min`;
+}
+
+// "40 kg × 10" / "10 reps" / "45 s" / "20 kg · 40 s"
+export function fmtSet(set: Pick<SessionSet, 'reps' | 'weight_kg' | 'is_time'>): string {
+  if (set.is_time) {
+    const t = fmtDuration(set.reps);
+    return set.weight_kg ? `${fmtKg(set.weight_kg)} kg · ${t}` : t;
+  }
   const reps = set.reps ?? '—';
   if (!set.weight_kg) return `${reps} reps`;
   return `${fmtKg(set.weight_kg)} kg × ${reps}`;

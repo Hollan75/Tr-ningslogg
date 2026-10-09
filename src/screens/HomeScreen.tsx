@@ -17,6 +17,8 @@ import { getStats, getSessions, getTemplates, getActiveSession } from '../databa
 import ResumeBanner from '../components/ResumeBanner';
 import { openWorkout, startWorkout } from '../utils/workout';
 import { durationMin, fmtRelativeDate } from '../utils/format';
+import { loadSchedule } from '../utils/schedule';
+import { nextScheduled } from '../utils/notify';
 import type { WorkoutSession, WorkoutTemplate } from '../types';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 
@@ -36,6 +38,7 @@ export default function HomeScreen() {
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
   const [active, setActive] = useState<WorkoutSession | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [nextTraining, setNextTraining] = useState<string | null>(null);
 
   async function load() {
     const [st, sessions, tpls, act] = await Promise.all([
@@ -53,6 +56,12 @@ export default function HomeScreen() {
         .slice(0, 4)
     );
     setActive(act);
+    const next = nextScheduled(await loadSchedule());
+    setNextTraining(
+      next
+        ? `${next.date.toLocaleDateString('sv-SE', { weekday: 'long' })} ${String(next.date.getHours()).padStart(2, '0')}:${String(next.date.getMinutes()).padStart(2, '0')}${next.entry.templateName ? ` · ${next.entry.templateName}` : ''}`
+        : null
+    );
   }
 
   useFocusEffect(useCallback(() => { load(); }, []));
@@ -76,6 +85,9 @@ export default function HomeScreen() {
             <Text style={s.sub}>{greeting()} 👋</Text>
             <Text style={s.title}>Träningslogg</Text>
           </View>
+          <TouchableOpacity style={[s.gear, { marginRight: 8 }]} onPress={() => navigation.navigate('Schedule')} hitSlop={8}>
+            <Ionicons name="alarm-outline" size={20} color={COLORS.text} />
+          </TouchableOpacity>
           <TouchableOpacity style={s.gear} onPress={() => navigation.navigate('Settings')} hitSlop={8}>
             <Ionicons name="settings-outline" size={20} color={COLORS.text} />
           </TouchableOpacity>
@@ -92,6 +104,14 @@ export default function HomeScreen() {
             }
           />
         )}
+
+        <TouchableOpacity style={s.nextRow} onPress={() => navigation.navigate('Schedule')}>
+          <Ionicons name="alarm" size={16} color={COLORS.accent} />
+          <Text style={s.nextText} numberOfLines={1}>
+            {nextTraining ? `Nästa träning: ${nextTraining}` : 'Lägg in ett träningsschema med påminnelser'}
+          </Text>
+          <Ionicons name="chevron-forward" size={14} color={COLORS.textMuted} />
+        </TouchableOpacity>
 
         <View style={s.statsRow}>
           <StatCard icon="flame" value={stats.thisWeekSessions} label="Pass i veckan" highlight />
@@ -204,6 +224,17 @@ const s = StyleSheet.create({
   },
 
   statsRow: { flexDirection: 'row', gap: 8, marginBottom: 24 },
+  nextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
+  },
+  nextText: { flex: 1, color: COLORS.text, fontSize: 14, fontWeight: '600' },
   statCard: {
     flex: 1,
     backgroundColor: COLORS.surface,

@@ -13,6 +13,7 @@ import ActiveWorkoutScreen from '../screens/ActiveWorkoutScreen';
 import HistoryScreen from '../screens/HistoryScreen';
 import SessionDetailScreen from '../screens/SessionDetailScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import ScheduleScreen from '../screens/ScheduleScreen';
 import AICoachScreen from '../screens/AICoachScreen';
 
 // Root stack – contains tabs + modal screens
@@ -24,6 +25,7 @@ export type RootStackParamList = {
   ActiveWorkout: { sessionId?: number; templateId?: number; sessionName: string };
   SessionDetail: { sessionId: number };
   Settings: undefined;
+  Schedule: undefined;
 };
 
 // Bottom tabs
@@ -127,6 +129,7 @@ export default function AppNavigator() {
       />
       <Stack.Screen name="SessionDetail" component={SessionDetailScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="Schedule" component={ScheduleScreen} />
     </Stack.Navigator>
   );
 }

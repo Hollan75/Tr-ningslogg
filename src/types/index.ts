@@ -9,6 +9,7 @@ export interface Exercise {
   gifUrl: string | null;
   instructions: string | null; // semicolon-separated
   difficulty: string | null;
+  measure?: 'reps' | 'time' | null; // default way to log the exercise
 }
 
 export interface WorkoutTemplate {
@@ -30,8 +31,10 @@ export interface TemplateExercise {
   rest_seconds: number;
   order_index: number;
   weight_kg?: number | null;
+  mode?: 'reps' | 'time' | null; // 'time' → reps_min holds seconds
   exercise_name?: string;
   bodyPart?: string;
+  measure?: 'reps' | 'time' | null;
 }
 
 export interface WorkoutSession {
@@ -55,6 +58,7 @@ export interface SessionSet {
   weight_kg: number | null;
   completed_at: string | null;
   is_warmup: number;
+  is_time?: number; // 1 → reps holds seconds
   exercise_name?: string;
 }
 

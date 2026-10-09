@@ -78,6 +78,18 @@ async function setupSchema(db: SQLite.SQLiteDatabase): Promise<void> {
     // Column already exists
   }
 
+  // Migration: reps or time based exercises ('reps' | 'time')
+  try {
+    await db.execAsync("ALTER TABLE exercises ADD COLUMN measure TEXT");
+  } catch {
+    // Column already exists
+  }
+  try {
+    await db.execAsync("ALTER TABLE template_exercises ADD COLUMN mode TEXT");
+  } catch {
+    // Column already exists
+  }
+
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS workout_sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,6 +127,13 @@ async function setupSchema(db: SQLite.SQLiteDatabase): Promise<void> {
       FOREIGN KEY (exercise_id) REFERENCES exercises(id)
     );
   `);
+
+  // Migration: time based sets store seconds in `reps` and is_time = 1
+  try {
+    await db.execAsync('ALTER TABLE session_sets ADD COLUMN is_time INTEGER NOT NULL DEFAULT 0');
+  } catch {
+    // Column already exists
+  }
 
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS settings (
@@ -174,8 +193,8 @@ export async function insertExercisesBatch(exercises: Exercise[], replace = fals
     for (const ex of exercises) {
       await db.runAsync(
         `INSERT OR ${replace ? 'REPLACE' : 'IGNORE'} INTO exercises
-         (id, name, category, primaryMuscles, secondaryMuscles, equipment, bodyPart, gifUrl, instructions, difficulty)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, name, category, primaryMuscles, secondaryMuscles, equipment, bodyPart, gifUrl, instructions, difficulty, measure)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           String(ex.id),
           String(ex.name),
@@ -187,6 +206,7 @@ export async function insertExercisesBatch(exercises: Exercise[], replace = fals
           ex.gifUrl != null ? String(ex.gifUrl) : null,
           ex.instructions != null ? String(ex.instructions) : null,
           ex.difficulty != null ? String(ex.difficulty) : null,
+          ex.measure ?? null,
         ]
       );
     }
@@ -340,8 +360,8 @@ export async function insertExercise(exercise: Exercise): Promise<void> {
   const db = await getDb();
   await db.runAsync(
     `INSERT OR REPLACE INTO exercises
-     (id, name, category, primaryMuscles, secondaryMuscles, equipment, bodyPart, gifUrl, instructions, difficulty)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (id, name, category, primaryMuscles, secondaryMuscles, equipment, bodyPart, gifUrl, instructions, difficulty, measure)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       String(exercise.id),
       String(exercise.name),
@@ -353,6 +373,7 @@ export async function insertExercise(exercise: Exercise): Promise<void> {
       exercise.gifUrl != null ? String(exercise.gifUrl) : null,
       exercise.instructions != null ? String(exercise.instructions) : null,
       exercise.difficulty != null ? String(exercise.difficulty) : null,
+      exercise.measure ?? null,
     ]
   );
 }
@@ -415,6 +436,7 @@ export interface TemplateExerciseInput {
   reps: number;
   weightKg: number;
   restSeconds: number;
+  mode?: 'reps' | 'time';
 }
 
 // Saves name and the full exercise list in one transaction. Returns the template id.
@@ -441,9 +463,9 @@ export async function saveTemplate(
       const ex = exercises[i];
       await db.runAsync(
         `INSERT INTO template_exercises
-         (template_id, exercise_id, sets, reps_min, reps_max, rest_seconds, order_index, weight_kg)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, ex.exerciseId, ex.sets, ex.reps, ex.reps, ex.restSeconds, i, ex.weightKg]
+         (template_id, exercise_id, sets, reps_min, reps_max, rest_seconds, order_index, weight_kg, mode)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, ex.exerciseId, ex.sets, ex.reps, ex.reps, ex.restSeconds, i, ex.weightKg, ex.mode ?? null]
       );
     }
     await db.execAsync('COMMIT');
@@ -492,7 +514,7 @@ export async function deleteTemplate(id: number): Promise<void> {
 export async function getTemplateExercises(templateId: number): Promise<TemplateExercise[]> {
   const db = await getDb();
   return db.getAllAsync<TemplateExercise>(
-    `SELECT te.*, e.name as exercise_name, e.bodyPart
+    `SELECT te.*, e.name as exercise_name, e.bodyPart, e.measure
      FROM template_exercises te
      JOIN exercises e ON te.exercise_id = e.id
      WHERE te.template_id = ?
@@ -582,7 +604,7 @@ export async function getSessions(): Promise<WorkoutSession[]> {
        (SELECT COUNT(DISTINCT exercise_id) FROM session_sets WHERE session_id = ws.id) as exercise_count,
        (SELECT COUNT(*) FROM session_sets WHERE session_id = ws.id) as set_count,
        (SELECT COALESCE(SUM(COALESCE(reps,0) * COALESCE(weight_kg,0)),0)
-        FROM session_sets WHERE session_id = ws.id) as total_volume
+        FROM session_sets WHERE session_id = ws.id AND is_time = 0) as total_volume
      FROM workout_sessions ws
      LEFT JOIN workout_templates wt ON ws.template_id = wt.id
      WHERE ws.completed_at IS NOT NULL
@@ -609,13 +631,14 @@ export async function addSessionSet(
   setNumber: number,
   reps: number | null,
   weightKg: number | null,
-  isWarmup: boolean
+  isWarmup: boolean,
+  isTime = false
 ): Promise<number> {
   const db = await getDb();
   const result = await db.runAsync(
     `INSERT INTO session_sets
-     (session_id, exercise_id, set_number, reps, weight_kg, completed_at, is_warmup)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+     (session_id, exercise_id, set_number, reps, weight_kg, completed_at, is_warmup, is_time)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       sessionId,
       exerciseId,
@@ -624,6 +647,7 @@ export async function addSessionSet(
       weightKg,
       new Date().toISOString(),
       isWarmup ? 1 : 0,
+      isTime ? 1 : 0,
     ]
   );
   return result.lastInsertRowId;

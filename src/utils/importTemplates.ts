@@ -86,10 +86,13 @@ export async function importTemplatesFromJson(text: string): Promise<ImportResul
         result.newExercises.push(exName);
       }
 
+      // "sek" makes it a timed exercise; otherwise the exercise's own default applies
+      const seconds = pick(e, 'sek', 'sekunder', 'seconds');
       inputs.push({
         exerciseId,
+        mode: seconds !== undefined ? 'time' : pick(e, 'reps') !== undefined ? 'reps' : undefined,
         sets: Math.max(1, Math.round(num(pick(e, 'set', 'sets'), 3))),
-        reps: Math.max(1, Math.round(num(pick(e, 'reps'), 10))),
+        reps: Math.max(1, Math.round(num(seconds ?? pick(e, 'reps'), seconds !== undefined ? 30 : 10))),
         weightKg: Math.max(0, num(pick(e, 'kg', 'vikt', 'weight'), 0)),
         restSeconds: Math.max(0, Math.round(num(pick(e, 'vila', 'rest'), 90))),
       });

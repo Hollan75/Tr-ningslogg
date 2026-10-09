@@ -18,6 +18,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, RADIUS } from '../theme';
 import { getSessions, cancelSession, getSessionSets } from '../database';
 import type { WorkoutSession, SessionSet } from '../types';
+import { fmtSet } from '../utils/format';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -68,7 +69,7 @@ function groupSets(sets: SessionSet[]): ExerciseGroup[] {
     }
     const g = map.get(set.exercise_id)!;
     g.sets.push(set);
-    g.volume += (set.reps ?? 0) * (set.weight_kg ?? 0);
+    if (!set.is_time) g.volume += (set.reps ?? 0) * (set.weight_kg ?? 0);
   }
   return [...map.values()];
 }
@@ -201,7 +202,7 @@ export default function HistoryScreen() {
                             {group.sets.map(set => (
                               <View key={set.id} style={s.setPill}>
                                 <Text style={s.setPillText}>
-                                  {set.reps ?? '—'} × {set.weight_kg != null ? `${set.weight_kg} kg` : '—'}
+                                  {fmtSet(set)}
                                 </Text>
                                 {set.is_warmup ? (
                                   <Text style={s.warmupTag}>wu</Text>

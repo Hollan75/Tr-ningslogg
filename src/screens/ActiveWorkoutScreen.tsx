@@ -35,7 +35,8 @@ import {
 } from '../database';
 import ExercisePicker from '../components/ExercisePicker';
 import ExerciseHistoryList from '../components/ExerciseHistoryList';
-import { fmtKg, fmtSet, parseNum } from '../utils/format';
+import { fmtDuration, fmtKg, fmtSet, parseNum } from '../utils/format';
+import { scheduleTimerAlert, cancelAlert, ringNow } from '../utils/notify';
 import type { SessionSet, Exercise } from '../types';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 
@@ -57,6 +58,7 @@ interface ExState {
   name: string;
   bodyPart: string | null;
   restSeconds: number;
+  mode: 'reps' | 'time'; // 'time' → the reps field holds seconds
   targetSets: number | null;
   targetReps: number | null;
   targetWeight: number | null;
@@ -90,6 +92,16 @@ function useRestTimer() {
   const [endAt, setEndAt] = useState<number | null>(null);
   const [total, setTotal] = useState(0);
   const [now, setNow] = useState(Date.now());
+  const alertId = useRef<string | null>(null);
+
+  async function reschedule(seconds: number | null) {
+    const old = alertId.current;
+    alertId.current = null;
+    await cancelAlert(old);
+    if (seconds && seconds > 0) {
+      alertId.current = await scheduleTimerAlert(seconds, 'Vilan är slut', 'Dags för nästa set 💪');
+    }
+  }
 
   useEffect(() => {
     if (!endAt) return;
@@ -99,10 +111,15 @@ function useRestTimer() {
       if (t >= endAt) {
         Vibration.vibrate([0, 300, 100, 300, 100, 300]);
         setEndAt(null);
+        // App is open: ring right away instead of waiting for the scheduled alert
+        reschedule(null);
+        ringNow('Vilan är slut', 'Dags för nästa set 💪');
       }
     }, 250);
     return () => clearInterval(iv);
   }, [endAt]);
+
+  useEffect(() => () => void cancelAlert(alertId.current), []);
 
   return {
     remaining: endAt ? Math.max(0, Math.ceil((endAt - now) / 1000)) : 0,
@@ -112,15 +129,33 @@ function useRestTimer() {
       setTotal(seconds);
       setNow(Date.now());
       setEndAt(Date.now() + seconds * 1000);
+      reschedule(seconds);
     },
     adjust(delta: number) {
-      setEndAt(prev => (prev ? Math.max(Date.now() + 1000, prev + delta * 1000) : prev));
+      if (!endAt) return;
+      const next = Math.max(Date.now() + 1000, endAt + delta * 1000);
+      setEndAt(next);
       setTotal(t => Math.max(1, t + delta));
+      reschedule((next - Date.now()) / 1000);
     },
     skip() {
       setEndAt(null);
+      reschedule(null);
     },
   };
+}
+
+// Countdown for timed sets (e.g. 45 s plank) with a short get-ready phase
+const GET_READY = 3;
+
+interface WorkTimer {
+  exKey: string;
+  rowKey: string;
+  name: string;
+  total: number;
+  startAt: number; // after the get-ready phase
+  endAt: number;
+  alertId: string | null;
 }
 
 // ─── Screen ─────────────────────────────────────────────────────────────────
@@ -143,6 +178,9 @@ export default function ActiveWorkoutScreen() {
   const [historyFor, setHistoryFor] = useState<ExState | null>(null);
   const [finishing, setFinishing] = useState(false);
   const [showFinish, setShowFinish] = useState(false);
+  const [work, setWork] = useState<WorkTimer | null>(null);
+  const [workNow, setWorkNow] = useState(Date.now());
+  const finishedWork = useRef<WorkTimer | null>(null);
   const [includePending, setIncludePending] = useState(true);
   const busy = useRef<Set<string>>(new Set());
   const exercisesRef = useRef<ExState[]>([]);
@@ -172,6 +210,7 @@ export default function ActiveWorkoutScreen() {
         name: te.exercise_name ?? '',
         bodyPart: te.bodyPart ?? null,
         restSeconds: te.rest_seconds > 0 ? te.rest_seconds : DEFAULT_REST,
+        mode: (te.mode ?? te.measure) === 'time' ? 'time' : 'reps',
         targetSets: te.sets,
         targetReps: te.reps_min,
         targetWeight: te.weight_kg ?? null,
@@ -189,6 +228,7 @@ export default function ActiveWorkoutScreen() {
             name: set.exercise_name ?? set.exercise_id,
             bodyPart: null,
             restSeconds: DEFAULT_REST,
+            mode: set.is_time ? 'time' : 'reps',
             targetSets: null,
             targetReps: null,
             targetWeight: null,
@@ -268,8 +308,13 @@ export default function ActiveWorkoutScreen() {
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
   // Suggested values for a row: last time's matching set → template target → previous row
+  function sameKind(ex: ExState): SessionSet[] {
+    return ex.prev.filter(p => !!p.is_time === (ex.mode === 'time'));
+  }
+
   function suggestion(ex: ExState, idx: number): { reps: string; weight: string } {
-    const p = ex.prev[idx] ?? ex.prev[ex.prev.length - 1];
+    const prev = sameKind(ex);
+    const p = prev[idx] ?? prev[prev.length - 1];
     if (p) {
       return {
         reps: p.reps != null ? String(p.reps) : '',
@@ -310,12 +355,12 @@ export default function ActiveWorkoutScreen() {
     await updateSessionSet(row.dbId, idx + 1, reps != null ? Math.round(reps) : null, weight);
   }
 
-  async function toggleRow(ex: ExState, row: Row) {
+  async function toggleRow(ex: ExState, row: Row, overrideReps?: number) {
     if (busy.current.has(row.key)) return;
     busy.current.add(row.key);
     try {
       const idx = ex.rows.findIndex(r => r.key === row.key);
-      if (row.dbId) {
+      if (row.dbId && overrideReps == null) {
         await removeSessionSet(row.dbId);
         updateEx(ex.key, e => ({
           ...e,
@@ -323,13 +368,17 @@ export default function ActiveWorkoutScreen() {
         }));
         return;
       }
+      if (row.dbId) return;
       const sug = suggestion(ex, idx);
-      const repsStr = row.reps || sug.reps;
+      const repsStr = overrideReps != null ? String(overrideReps) : row.reps || sug.reps;
       const weightStr = row.weight || sug.weight;
       const reps = parseNum(repsStr);
       const weight = parseNum(weightStr);
       if (reps == null) {
-        Alert.alert('Ange reps', 'Fyll i antal repetitioner för setet.');
+        Alert.alert(
+          ex.mode === 'time' ? 'Ange tid' : 'Ange reps',
+          ex.mode === 'time' ? 'Fyll i antal sekunder för setet.' : 'Fyll i antal repetitioner för setet.'
+        );
         return;
       }
       const sid = await ensureStarted();
@@ -340,7 +389,8 @@ export default function ActiveWorkoutScreen() {
         idx + 1,
         Math.round(reps),
         weight,
-        false
+        false,
+        ex.mode === 'time'
       );
       updateEx(ex.key, e => ({
         ...e,
@@ -354,6 +404,73 @@ export default function ActiveWorkoutScreen() {
     } finally {
       busy.current.delete(row.key);
     }
+  }
+
+  // Starts the countdown for a timed set; the set is logged when time is up
+  async function startWork(ex: ExState, row: Row) {
+    const idx = ex.rows.findIndex(r => r.key === row.key);
+    const seconds = Math.round(parseNum(row.reps || suggestion(ex, idx).reps) ?? 0);
+    if (seconds <= 0) {
+      Alert.alert('Ange tid', 'Fyll i hur många sekunder setet ska vara.');
+      return;
+    }
+    rest.skip();
+    const now = Date.now();
+    const alertId = await scheduleTimerAlert(seconds + GET_READY, 'Tiden är ute! ⏱', `${ex.name} – ${fmtDuration(seconds)} klart`);
+    setWorkNow(now);
+    setWork({
+      exKey: ex.key,
+      rowKey: row.key,
+      name: ex.name,
+      total: seconds,
+      startAt: now + GET_READY * 1000,
+      endAt: now + (GET_READY + seconds) * 1000,
+      alertId,
+    });
+  }
+
+  async function finishWork(w: WorkTimer, seconds: number, ring: boolean) {
+    // The interval may fire again before state updates – handle each timer once
+    if (finishedWork.current === w) return;
+    finishedWork.current = w;
+    setWork(null);
+    await cancelAlert(w.alertId);
+    if (ring) {
+      Vibration.vibrate([0, 500, 150, 500, 150, 500]);
+      ringNow('Tiden är ute! ⏱', `${w.name} – ${fmtDuration(seconds)} klart`);
+    }
+    const ex = exercisesRef.current.find(e => e.key === w.exKey);
+    const row = ex?.rows.find(r => r.key === w.rowKey);
+    if (ex && row) await toggleRow(ex, row, Math.max(1, seconds));
+  }
+
+  function cancelWork() {
+    if (!work) return;
+    cancelAlert(work.alertId);
+    setWork(null);
+  }
+
+  useEffect(() => {
+    if (!work) return;
+    const iv = setInterval(() => {
+      const t = Date.now();
+      setWorkNow(t);
+      if (t >= work.endAt) finishWork(work, work.total, true);
+    }, 200);
+    return () => clearInterval(iv);
+  }, [work]);
+
+  function toggleMode(ex: ExState) {
+    if (ex.rows.some(r => r.dbId)) {
+      Alert.alert('Kan inte byta', 'Ta bort de loggade seten först för att byta mellan reps och tid.');
+      return;
+    }
+    updateEx(ex.key, e => ({
+      ...e,
+      mode: e.mode === 'time' ? 'reps' : 'time',
+      targetReps: null,
+      rows: e.rows.map(r => ({ ...r, reps: '' })),
+    }));
   }
 
   function addRow(ex: ExState) {
@@ -375,6 +492,7 @@ export default function ActiveWorkoutScreen() {
       name: exercise.name,
       bodyPart: exercise.bodyPart,
       restSeconds: DEFAULT_REST,
+      mode: exercise.measure === 'time' ? 'time' : 'reps',
       targetSets: null,
       targetReps: null,
       targetWeight: null,
@@ -428,7 +546,7 @@ export default function ActiveWorkoutScreen() {
             await updateSessionSet(row.dbId, n, reps != null ? Math.round(reps) : null, weight);
           } else if (logPending && row.reps.trim() !== '' && reps != null) {
             n += 1;
-            await addSessionSet(sid, ex.exerciseId, n, Math.round(reps), weight, false);
+            await addSessionSet(sid, ex.exerciseId, n, Math.round(reps), weight, false, ex.mode === 'time');
           }
         }
       }
@@ -517,7 +635,9 @@ export default function ActiveWorkoutScreen() {
               const allDone = ex.rows.length > 0 && ex.rows.every(r => r.dbId);
               const targetText =
                 ex.targetSets != null
-                  ? `Mål ${ex.targetSets}×${ex.targetReps ?? '–'}${
+                  ? `Mål ${ex.targetSets}×${
+                      ex.mode === 'time' ? fmtDuration(ex.targetReps) : ex.targetReps ?? '–'
+                    }${
                       ex.targetWeight ? ` · ${fmtKg(ex.targetWeight)} kg` : ''
                     }`
                   : null;
@@ -532,6 +652,14 @@ export default function ActiveWorkoutScreen() {
                           .join('  ·  ')}
                       </Text>
                     </TouchableOpacity>
+                    <TouchableOpacity style={s.modeChip} onPress={() => toggleMode(ex)} hitSlop={6}>
+                      <Ionicons
+                        name={ex.mode === 'time' ? 'timer-outline' : 'repeat'}
+                        size={14}
+                        color={COLORS.text}
+                      />
+                      <Text style={s.modeChipText}>{ex.mode === 'time' ? 'Tid' : 'Reps'}</Text>
+                    </TouchableOpacity>
                     <TouchableOpacity style={s.smallIcon} onPress={() => setHistoryFor(ex)} hitSlop={6}>
                       <Ionicons name="stats-chart" size={16} color={COLORS.accent} />
                     </TouchableOpacity>
@@ -544,14 +672,15 @@ export default function ActiveWorkoutScreen() {
                     <Text style={[s.th, s.cSet]}>SET</Text>
                     <Text style={[s.th, s.cPrev]}>FÖRRA</Text>
                     <Text style={[s.th, s.cIn]}>KG</Text>
-                    <Text style={[s.th, s.cIn]}>REPS</Text>
+                    <Text style={[s.th, s.cIn]}>{ex.mode === 'time' ? 'SEK' : 'REPS'}</Text>
                     <View style={s.cCheck} />
                   </View>
 
                   {ex.rows.map((row, idx) => {
                     const sug = suggestion(ex, idx);
-                    const p = ex.prev[idx];
+                    const p = sameKind(ex)[idx];
                     const logged = row.dbId != null;
+                    const timed = ex.mode === 'time';
                     return (
                       <View key={row.key} style={[s.setRow, logged && s.setRowDone]}>
                         <TouchableOpacity
@@ -585,7 +714,11 @@ export default function ActiveWorkoutScreen() {
                           }
                         >
                           <Text style={s.prevText} numberOfLines={1}>
-                            {p ? `${p.weight_kg ? fmtKg(p.weight_kg) + '×' : ''}${p.reps ?? '–'}` : '–'}
+                            {p
+                              ? timed
+                                ? `${p.weight_kg ? fmtKg(p.weight_kg) + 'kg ' : ''}${p.reps ?? '–'}s`
+                                : `${p.weight_kg ? fmtKg(p.weight_kg) + '×' : ''}${p.reps ?? '–'}`
+                              : '–'}
                           </Text>
                         </TouchableOpacity>
                         <TextInput
@@ -608,13 +741,24 @@ export default function ActiveWorkoutScreen() {
                           onChangeText={v => setRowField(ex.key, row.key, 'reps', v)}
                           onEndEditing={() => persistRow(ex.key, row.key)}
                         />
-                        <TouchableOpacity
-                          style={[s.cCheck, s.checkBtn, logged && s.checkBtnDone]}
-                          onPress={() => toggleRow(ex, row)}
-                          hitSlop={6}
-                        >
-                          <Ionicons name="checkmark" size={20} color={logged ? '#fff' : COLORS.textMuted} />
-                        </TouchableOpacity>
+                        {timed && !logged ? (
+                          <TouchableOpacity
+                            style={[s.cCheck, s.checkBtn, s.playBtn]}
+                            onPress={() => startWork(ex, row)}
+                            onLongPress={() => toggleRow(ex, row)}
+                            hitSlop={6}
+                          >
+                            <Ionicons name="play" size={18} color="#fff" />
+                          </TouchableOpacity>
+                        ) : (
+                          <TouchableOpacity
+                            style={[s.cCheck, s.checkBtn, logged && s.checkBtnDone]}
+                            onPress={() => toggleRow(ex, row)}
+                            hitSlop={6}
+                          >
+                            <Ionicons name="checkmark" size={20} color={logged ? '#fff' : COLORS.textMuted} />
+                          </TouchableOpacity>
+                        )}
                       </View>
                     );
                   })}
@@ -681,6 +825,50 @@ export default function ActiveWorkoutScreen() {
         onSelect={handleAddExercise}
         onClose={() => setShowPicker(false)}
       />
+
+      <Modal visible={work != null} transparent animationType="fade" onRequestClose={cancelWork}>
+        {work && (() => {
+          const ready = workNow < work.startAt;
+          const left = ready
+            ? Math.ceil((work.startAt - workNow) / 1000)
+            : Math.max(0, Math.ceil((work.endAt - workNow) / 1000));
+          const done = ready ? 0 : Math.min(1, (workNow - work.startAt) / (work.total * 1000));
+          return (
+            <View style={s.workBackdrop}>
+              <View style={s.workCard}>
+                <Text style={s.workName} numberOfLines={2}>{work.name}</Text>
+                <Text style={[s.workPhase, ready && { color: COLORS.warning }]}>
+                  {ready ? 'Gör dig redo…' : 'Kör!'}
+                </Text>
+                <Text style={[s.workTime, ready && { color: COLORS.warning }]}>
+                  {ready ? left : `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`}
+                </Text>
+                <View style={s.workTrack}>
+                  <View style={[s.workFill, { width: `${Math.round(done * 100)}%` }]} />
+                </View>
+                <Text style={s.workGoal}>Mål: {fmtDuration(work.total)}</Text>
+                <View style={s.workBtns}>
+                  <TouchableOpacity style={s.workCancel} onPress={cancelWork}>
+                    <Text style={s.workCancelText}>Avbryt</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={s.workDone}
+                    onPress={() =>
+                      finishWork(
+                        work,
+                        ready ? work.total : Math.max(1, Math.round((Date.now() - work.startAt) / 1000)),
+                        false
+                      )
+                    }
+                  >
+                    <Text style={s.workDoneText}>Klar nu</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          );
+        })()}
+      </Modal>
 
       <Modal
         visible={showFinish}
@@ -849,6 +1037,67 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   checkBtnDone: { backgroundColor: COLORS.green },
+  playBtn: { backgroundColor: COLORS.accent },
+  modeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    height: 32,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    backgroundColor: COLORS.surface2,
+  },
+  modeChipText: { color: COLORS.text, fontSize: 12, fontWeight: '700' },
+
+  workBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  workCard: {
+    width: '100%',
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    padding: 24,
+    alignItems: 'center',
+  },
+  workName: { color: COLORS.text, fontSize: 20, fontWeight: '800', textAlign: 'center' },
+  workPhase: { color: COLORS.green, fontSize: 15, fontWeight: '700', marginTop: 8 },
+  workTime: {
+    color: COLORS.text,
+    fontSize: 84,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+    marginVertical: 8,
+  },
+  workTrack: {
+    width: '100%',
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.surface2,
+    overflow: 'hidden',
+  },
+  workFill: { height: 8, backgroundColor: COLORS.green },
+  workGoal: { color: COLORS.textMuted, fontSize: 13, marginTop: 10 },
+  workBtns: { flexDirection: 'row', gap: 10, marginTop: 22, alignSelf: 'stretch' },
+  workCancel: {
+    flex: 1,
+    padding: 15,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+    backgroundColor: COLORS.surface2,
+  },
+  workCancelText: { color: COLORS.text, fontWeight: '700', fontSize: 15 },
+  workDone: {
+    flex: 1,
+    padding: 15,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+    backgroundColor: COLORS.green,
+  },
+  workDoneText: { color: '#06281d', fontWeight: '800', fontSize: 15 },
 
   addSetBtn: {
     flexDirection: 'row',
