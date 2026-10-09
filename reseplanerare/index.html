@@ -256,7 +256,7 @@ details.more[open] > summary { margin-bottom: 8px; }
           <label for="chatInput" class="label" hidden>Meddelande</label>
           <textarea id="chatInput" rows="1" placeholder="Berätta om planer, ledigheter eller vad du gillar. Diktera gärna med tangentbordets mikrofon."></textarea>
           <div class="side">
-            <button class="btn primary" type="submit" id="chatSend">Skicka</button>
+            <button class="btn primary" type="button" id="chatSend">Skicka</button>
             <button class="btn ghost sm" type="button" id="chatStop" hidden>Avbryt</button>
           </div>
         </form>
@@ -286,7 +286,7 @@ details.more[open] > summary { margin-bottom: 8px; }
         <div class="chips" id="pInterests"></div>
       </div>
       <div class="actions">
-        <button class="btn primary" type="submit" id="planBtn">Hitta resa</button>
+        <button class="btn primary" type="button" id="planBtn">Hitta resa</button>
         <button class="btn ghost" type="button" id="planStop" hidden>Avbryt</button>
         <span class="small muted" id="planMeta"></span>
       </div>
@@ -311,7 +311,7 @@ details.more[open] > summary { margin-bottom: 8px; }
         <div class="chips" id="dInterests"></div>
       </div>
       <div class="actions">
-        <button class="btn primary" type="submit" id="discBtn">Hitta evenemang</button>
+        <button class="btn primary" type="button" id="discBtn">Hitta evenemang</button>
         <button class="btn ghost" type="button" id="discStop" hidden>Avbryt</button>
       </div>
     </form>
@@ -333,7 +333,7 @@ details.more[open] > summary { margin-bottom: 8px; }
         <div class="field"><label class="label" for="lFrom">Från</label><input id="lFrom" type="date" required></div>
         <div class="field"><label class="label" for="lTo">Till</label><input id="lTo" type="date" required></div>
       </div>
-      <div class="actions"><button class="btn" type="submit">Lägg till ledighet</button></div>
+      <div class="actions"><button class="btn" type="button" id="leaveAdd">Lägg till ledighet</button></div>
     </form>
     <div class="list" id="leaveList"></div>
   </section>
@@ -387,7 +387,7 @@ details.more[open] > summary { margin-bottom: 8px; }
         <div class="field"><label class="label" for="fDiet">Mat och kost</label><input id="fDiet" placeholder="t.ex. vegetariskt, glutenfritt"></div>
       </div>
       <div class="field"><label class="label" for="fNotes">Övrigt Claude ska veta</label><textarea id="fNotes" placeholder="t.ex. vill kunna träna på hotellet, undviker nattflyg"></textarea></div>
-      <div class="actions"><button class="btn primary" type="submit">Spara profil</button><span class="small muted" id="profSaved"></span></div>
+      <div class="actions"><button class="btn primary" type="button" id="profSave">Spara profil</button><span class="small muted" id="profSaved"></span></div>
     </form>
   </section>
 </main>
@@ -1535,7 +1535,7 @@ function fillProfileForm() {
   $("#profSaved").textContent = state.profileSaved ? "" : "Exempelvärden. Ändra och spara så används de i alla sökningar.";
 }
 function saveProfile(ev) {
-  ev.preventDefault();
+  ev?.preventDefault();
   state.profile = {
     ...state.profile,
     home: ($("#fHome").value.trim() || "ARN").toUpperCase(), alt: $("#fAlt").value.trim().toUpperCase(),
@@ -1900,21 +1900,25 @@ function renderAll() {
 }
 
 document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => selectTab(t.dataset.tab)));
-$("#planForm").addEventListener("submit", runPlan);
+// Mobilappens visningsruta kan blockera formulärskick helt (submit-händelsen avfyras aldrig),
+// så alla knappar är vanliga knappar med klickhanterare. Formulären stoppas bara från att skickas.
+document.querySelectorAll("form").forEach(f => f.addEventListener("submit", e => e.preventDefault()));
+$("#planBtn").addEventListener("click", runPlan);
 $("#planStop").addEventListener("click", () => planCtl?.abort());
 ["#pDest", "#pFrom", "#pTo"].forEach(s => $(s).addEventListener("input", updatePlanLinks));
-$("#discForm").addEventListener("submit", runDiscover);
+$("#pDest").addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); runPlan(); } });
+$("#discBtn").addEventListener("click", runDiscover);
 $("#discStop").addEventListener("click", () => discCtl?.abort());
 $("#dPeriod").addEventListener("change", applyPeriod);
 ["#dFrom", "#dTo"].forEach(s => $(s).addEventListener("input", () => ($("#dPeriod").value = "custom")));
-$("#leaveForm").addEventListener("submit", e => {
-  e.preventDefault();
+$("#leaveAdd").addEventListener("click", () => {
   const from = $("#lFrom").value, to = $("#lTo").value;
-  if (!(validIso(from) && validIso(to) && to >= from)) { toast("Slutdatum måste vara efter startdatum."); return; }
-  addLeave({ label: $("#lLabel").value.trim(), from, to }); e.target.reset();
+  if (!(validIso(from) && validIso(to) && to >= from)) { toast("Välj start- och slutdatum. Slutdatum måste vara efter startdatum."); return; }
+  addLeave({ label: $("#lLabel").value.trim(), from, to });
+  $("#lLabel").value = ""; $("#lFrom").value = ""; $("#lTo").value = "";
 });
-$("#profForm").addEventListener("submit", saveProfile);
-$("#chatForm").addEventListener("submit", sendChat);
+$("#profSave").addEventListener("click", saveProfile);
+$("#chatSend").addEventListener("click", sendChat);
 $("#chatStop").addEventListener("click", () => chatCtl?.abort());
 $("#chatInput").addEventListener("input", autoGrow);
 $("#chatInput").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(); } });
