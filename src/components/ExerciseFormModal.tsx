@@ -15,8 +15,9 @@ import {
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { COLORS, RADIUS } from '../theme';
-import { insertExercise, getBodyParts } from '../database';
+import { insertExercise } from '../database';
 import { parseMuscles } from '../utils/format';
+import { MUSCLE_GROUPS, toGroup, toEquipment } from '../data/groups';
 import type { Exercise } from '../types';
 
 interface Props {
@@ -39,10 +40,10 @@ export default function ExerciseFormModal({ visible, exercise, initialName, onCl
   useEffect(() => {
     if (!visible) return;
     setName(exercise?.name ?? initialName ?? '');
-    setBp(exercise ? parseMuscles(exercise.primaryMuscles)[0] ?? '' : '');
+    setBp(exercise ? exercise.bodyPart ?? parseMuscles(exercise.primaryMuscles)[0] ?? '' : '');
     setEq(exercise?.equipment ?? '');
     setInstr(exercise?.instructions ?? '');
-    getBodyParts().then(setSuggestions).catch(() => setSuggestions([]));
+    setSuggestions(MUSCLE_GROUPS);
   }, [visible, exercise, initialName]);
 
   async function handleSave() {
@@ -52,15 +53,16 @@ export default function ExerciseFormModal({ visible, exercise, initialName, onCl
     }
     setSaving(true);
     try {
-      const muscles = bp.trim() ? [bp.trim().toLowerCase()] : [];
+      const group = toGroup(bp.trim() || null);
+      const muscles = group ? [group] : [];
       const saved: Exercise = {
         id: exercise?.id ?? `custom_${Date.now()}`,
         name: name.trim(),
         category: 'custom',
         primaryMuscles: JSON.stringify(muscles),
         secondaryMuscles: exercise?.secondaryMuscles ?? '[]',
-        equipment: eq.trim() || null,
-        bodyPart: muscles[0] ?? null,
+        equipment: toEquipment(eq.trim() || null),
+        bodyPart: group,
         gifUrl: null,
         instructions: instr.trim() || null,
         difficulty: null,
@@ -74,9 +76,7 @@ export default function ExerciseFormModal({ visible, exercise, initialName, onCl
     }
   }
 
-  const filteredSuggestions = suggestions
-    .filter(s => !bp || s.toLowerCase().includes(bp.toLowerCase()))
-    .slice(0, 12);
+  const filteredSuggestions = suggestions;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -100,7 +100,7 @@ export default function ExerciseFormModal({ visible, exercise, initialName, onCl
             <ScrollView contentContainerStyle={m.content} keyboardShouldPersistTaps="handled">
               <Field label="Namn *" placeholder="t.ex. Hantelcurl" value={name} onChangeText={setName} autoFocus={!exercise} />
               <View style={m.field}>
-                <Field label="Muskelgrupp" placeholder="t.ex. biceps" value={bp} onChangeText={setBp} />
+                <Field label="Muskelgrupp" placeholder="Välj nedan eller skriv egen" value={bp} onChangeText={setBp} />
                 {filteredSuggestions.length > 0 && (
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={m.chips} keyboardShouldPersistTaps="handled">
                     {filteredSuggestions.map(s => (

@@ -1,5 +1,6 @@
 import type { Exercise } from '../types';
 import exercisesJson from './exercises.json';
+import { toGroup, toEquipment } from './groups';
 
 interface RawExercise {
   id: string;
@@ -22,10 +23,11 @@ function mapExercise(raw: RawExercise): Exercise {
     category: raw.category ?? null,
     primaryMuscles: JSON.stringify(Array.isArray(raw.primaryMuscles) ? raw.primaryMuscles : []),
     secondaryMuscles: JSON.stringify(Array.isArray(raw.secondaryMuscles) ? raw.secondaryMuscles : []),
-    equipment: raw.equipment ?? null,
-    bodyPart: Array.isArray(raw.primaryMuscles) && raw.primaryMuscles.length > 0
-      ? raw.primaryMuscles[0]
-      : null,
+    equipment: toEquipment(raw.equipment ?? null),
+    bodyPart: toGroup(
+      Array.isArray(raw.primaryMuscles) && raw.primaryMuscles.length > 0 ? raw.primaryMuscles[0] : null,
+      raw.category
+    ),
     gifUrl: null,
     instructions: Array.isArray(raw.instructions) && raw.instructions.length > 0
       ? raw.instructions.join('; ')

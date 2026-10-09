@@ -6,6 +6,7 @@ import type {
   WorkoutSession,
   SessionSet,
 } from '../types';
+import { MUSCLE_GROUPS } from '../data/groups';
 
 let _db: SQLite.SQLiteDatabase | null = null;
 
@@ -239,20 +240,43 @@ export async function getExercises(
 }
 
 // Exercises used most recently in workouts or templates, plus custom exercises
-export async function getRecentExercises(limit = 15): Promise<Exercise[]> {
+export async function getRecentExercises(
+  limit = 15,
+  library: ExerciseLibrary = 'all'
+): Promise<Exercise[]> {
   const db = await getDb();
+  const lib = libraryCondition(library);
   return db.getAllAsync<Exercise>(
     `SELECT e.* FROM exercises e
      LEFT JOIN (
        SELECT exercise_id, MAX(completed_at) as last FROM session_sets GROUP BY exercise_id
      ) u ON u.exercise_id = e.id
-     WHERE u.last IS NOT NULL
+     WHERE (u.last IS NOT NULL
         OR e.id LIKE 'custom_%'
-        OR e.id IN (SELECT exercise_id FROM template_exercises)
+        OR e.id IN (SELECT exercise_id FROM template_exercises))
+       ${lib ? `AND ${lib.replace(/\bid\b/g, 'e.id')}` : ''}
      ORDER BY u.last IS NULL, u.last DESC, e.name
      LIMIT ?`,
     [limit]
   );
+}
+
+export async function getCustomExercises(): Promise<Exercise[]> {
+  const db = await getDb();
+  return db.getAllAsync<Exercise>("SELECT * FROM exercises WHERE id LIKE 'custom_%'");
+}
+
+export async function updateExerciseGroup(
+  id: string,
+  bodyPart: string | null,
+  equipment: string | null
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync('UPDATE exercises SET bodyPart = ?, equipment = ? WHERE id = ?', [
+    bodyPart,
+    equipment,
+    id,
+  ]);
 }
 
 export async function getAllExerciseNames(): Promise<{ id: string; name: string }[]> {
@@ -273,7 +297,11 @@ export async function getBodyParts(library: ExerciseLibrary = 'all'): Promise<st
      WHERE bodyPart IS NOT NULL AND bodyPart != '' ${lib ? `AND ${lib}` : ''}
      ORDER BY bodyPart`
   );
-  return rows.map(r => r.bodyPart);
+  const order = (g: string) => {
+    const i = MUSCLE_GROUPS.indexOf(g);
+    return i === -1 ? MUSCLE_GROUPS.length : i;
+  };
+  return rows.map(r => r.bodyPart).sort((a, b) => order(a) - order(b) || a.localeCompare(b, 'sv'));
 }
 
 export async function getEquipment(library: ExerciseLibrary = 'all'): Promise<string[]> {

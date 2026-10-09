@@ -43,11 +43,11 @@ export default function ExercisePicker({ visible, onSelect, onClose }: Props) {
     setSearch('');
     setBodyPartFilter(null);
     setPreview(null);
-    getRecentExercises().then(setRecent);
   }, [visible]);
 
   useEffect(() => {
     if (!visible) return;
+    getRecentExercises(15, library).then(setRecent);
     getBodyParts(library).then(bp => {
       setBodyParts(bp);
       setBodyPartFilter(cur => (cur && !bp.includes(cur) ? null : cur));
