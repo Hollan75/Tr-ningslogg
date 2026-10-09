@@ -15,6 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { COLORS, RADIUS } from '../theme';
 import { getExercises, getBodyParts, getRecentExercises } from '../database';
+import type { ExerciseLibrary } from '../database';
+import ExerciseInfo from './ExerciseInfo';
 import ExerciseFormModal from './ExerciseFormModal';
 import type { Exercise } from '../types';
 
@@ -32,14 +34,25 @@ export default function ExercisePicker({ visible, onSelect, onClose }: Props) {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [library, setLibrary] = useState<ExerciseLibrary>('sv');
+  // Exercise being previewed before it is added
+  const [preview, setPreview] = useState<Exercise | null>(null);
 
   useEffect(() => {
     if (!visible) return;
     setSearch('');
     setBodyPartFilter(null);
-    getBodyParts().then(setBodyParts);
+    setPreview(null);
     getRecentExercises().then(setRecent);
   }, [visible]);
+
+  useEffect(() => {
+    if (!visible) return;
+    getBodyParts(library).then(bp => {
+      setBodyParts(bp);
+      setBodyPartFilter(cur => (cur && !bp.includes(cur) ? null : cur));
+    });
+  }, [visible, library]);
 
   // Debounced search
   useEffect(() => {
@@ -47,13 +60,15 @@ export default function ExercisePicker({ visible, onSelect, onClose }: Props) {
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
-        setExercises(await getExercises(search || undefined, bodyPartFilter ?? undefined));
+        setExercises(
+          await getExercises(search || undefined, bodyPartFilter ?? undefined, undefined, library)
+        );
       } finally {
         setLoading(false);
       }
     }, 250);
     return () => clearTimeout(timer);
-  }, [search, bodyPartFilter, visible]);
+  }, [search, bodyPartFilter, visible, library]);
 
   const showRecent = !search && !bodyPartFilter && recent.length > 0;
   const recentIds = new Set(recent.map(r => r.id));
@@ -62,7 +77,7 @@ export default function ExercisePicker({ visible, onSelect, onClose }: Props) {
   function renderRow(item: Exercise) {
     const isCustom = item.id.startsWith('custom_');
     return (
-      <TouchableOpacity key={item.id} style={styles.row} onPress={() => onSelect(item)}>
+      <TouchableOpacity key={item.id} style={styles.row} onPress={() => setPreview(item)}>
         <View style={styles.rowInfo}>
           <View style={styles.nameRow}>
             <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>
@@ -78,14 +93,50 @@ export default function ExercisePicker({ visible, onSelect, onClose }: Props) {
             </Text>
           )}
         </View>
-        <Ionicons name="add-circle" size={26} color={COLORS.accent} />
+        <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
       </TouchableOpacity>
     );
   }
 
+  const previewView = preview ? (
+          <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+            <View style={styles.header}>
+              <TouchableOpacity onPress={() => setPreview(null)} style={styles.closeBtn} hitSlop={10}>
+                <Ionicons name="chevron-back" size={22} color={COLORS.text} />
+              </TouchableOpacity>
+              <Text style={styles.previewTitle}>Förhandsvisning</Text>
+              <View style={{ width: 36 }} />
+            </View>
+            <ScrollView contentContainerStyle={styles.previewContent}>
+              <ExerciseInfo exercise={preview} />
+            </ScrollView>
+            <View style={styles.previewFooter}>
+              <TouchableOpacity style={styles.previewBack} onPress={() => setPreview(null)}>
+                <Text style={styles.previewBackText}>Tillbaka</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.previewAdd}
+                onPress={() => {
+                  const ex = preview;
+                  setPreview(null);
+                  onSelect(ex);
+                }}
+              >
+                <Ionicons name="add" size={20} color="#fff" />
+                <Text style={styles.previewAddText}>Lägg till i passet</Text>
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
+  ) : null;
+
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      onRequestClose={() => (preview ? setPreview(null) : onClose())}
+    >
       <SafeAreaProvider>
+        {previewView ?? (
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
           <View style={styles.header}>
             <Text style={styles.title}>Välj övning</Text>
@@ -109,6 +160,20 @@ export default function ExercisePicker({ visible, onSelect, onClose }: Props) {
                 <Ionicons name="close-circle" size={18} color={COLORS.textMuted} />
               </TouchableOpacity>
             )}
+          </View>
+
+          <View style={styles.libraryRow}>
+            {(['sv', 'all'] as ExerciseLibrary[]).map(lib => (
+              <TouchableOpacity
+                key={lib}
+                style={[styles.libraryBtn, library === lib && styles.libraryBtnActive]}
+                onPress={() => setLibrary(lib)}
+              >
+                <Text style={[styles.libraryText, library === lib && styles.libraryTextActive]}>
+                  {lib === 'sv' ? 'Svenska & egna' : 'Alla + engelska'}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
 
           {bodyParts.length > 0 && (
@@ -177,6 +242,7 @@ export default function ExercisePicker({ visible, onSelect, onClose }: Props) {
             }}
           />
         </SafeAreaView>
+        )}
       </SafeAreaProvider>
     </Modal>
   );
@@ -269,4 +335,45 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
   },
   badgeText: { color: COLORS.accent, fontSize: 10, fontWeight: '700' },
+
+  libraryRow: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginTop: 10,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    padding: 3,
+  },
+  libraryBtn: { flex: 1, paddingVertical: 8, borderRadius: RADIUS.md - 3, alignItems: 'center' },
+  libraryBtnActive: { backgroundColor: COLORS.surface2 },
+  libraryText: { color: COLORS.textMuted, fontSize: 13, fontWeight: '600' },
+  libraryTextActive: { color: COLORS.text },
+
+  previewTitle: { color: COLORS.text, fontSize: 16, fontWeight: '700' },
+  previewContent: { padding: 16, paddingTop: 4, paddingBottom: 24 },
+  previewFooter: {
+    flexDirection: 'row',
+    gap: 10,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  previewBack: {
+    paddingHorizontal: 18,
+    justifyContent: 'center',
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.surface2,
+  },
+  previewBackText: { color: COLORS.text, fontWeight: '600', fontSize: 15 },
+  previewAdd: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 15,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.accent,
+  },
+  previewAddText: { color: '#fff', fontWeight: '800', fontSize: 16 },
 });

@@ -165,13 +165,14 @@ export async function deleteSetting(key: string): Promise<void> {
 
 // ─── EXERCISES ──────────────────────────────────────────────────────────────
 
-export async function insertExercisesBatch(exercises: Exercise[]): Promise<void> {
+// replace = true updates existing rows (used for the curated Swedish library)
+export async function insertExercisesBatch(exercises: Exercise[], replace = false): Promise<void> {
   const db = await getDb();
   await db.execAsync('BEGIN');
   try {
     for (const ex of exercises) {
       await db.runAsync(
-        `INSERT OR IGNORE INTO exercises
+        `INSERT OR ${replace ? 'REPLACE' : 'IGNORE'} INTO exercises
          (id, name, category, primaryMuscles, secondaryMuscles, equipment, bodyPart, gifUrl, instructions, difficulty)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -195,19 +196,29 @@ export async function insertExercisesBatch(exercises: Exercise[]): Promise<void>
   }
 }
 
+// 'sv' = Swedish library + own exercises, 'all' = everything incl. the English library
+export type ExerciseLibrary = 'sv' | 'all' | 'custom';
+
+function libraryCondition(library: ExerciseLibrary): string | null {
+  if (library === 'sv') return "(id LIKE 'se_%' OR id LIKE 'custom_%')";
+  if (library === 'custom') return "id LIKE 'custom_%'";
+  return null;
+}
+
 export async function getExercises(
   search?: string,
   bodyPart?: string,
   equipment?: string,
-  customOnly = false
+  library: ExerciseLibrary = 'all'
 ): Promise<Exercise[]> {
   const db = await getDb();
   const conditions: string[] = [];
   const params: (string | number)[] = [];
 
   if (search && search.trim()) {
-    conditions.push('LOWER(name) LIKE ?');
-    params.push(`%${search.toLowerCase().trim()}%`);
+    conditions.push('(LOWER(name) LIKE ? OR LOWER(primaryMuscles) LIKE ?)');
+    const q = `%${search.toLowerCase().trim()}%`;
+    params.push(q, q);
   }
   if (bodyPart) {
     conditions.push('bodyPart = ?');
@@ -217,9 +228,8 @@ export async function getExercises(
     conditions.push('equipment = ?');
     params.push(equipment);
   }
-  if (customOnly) {
-    conditions.push("id LIKE 'custom_%'");
-  }
+  const lib = libraryCondition(library);
+  if (lib) conditions.push(lib);
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   return db.getAllAsync<Exercise>(
@@ -245,23 +255,34 @@ export async function getRecentExercises(limit = 15): Promise<Exercise[]> {
   );
 }
 
+export async function getAllExerciseNames(): Promise<{ id: string; name: string }[]> {
+  const db = await getDb();
+  return db.getAllAsync<{ id: string; name: string }>('SELECT id, name FROM exercises');
+}
+
 export async function getExerciseById(id: string): Promise<Exercise | null> {
   const db = await getDb();
   return db.getFirstAsync<Exercise>('SELECT * FROM exercises WHERE id = ?', [id]);
 }
 
-export async function getBodyParts(): Promise<string[]> {
+export async function getBodyParts(library: ExerciseLibrary = 'all'): Promise<string[]> {
   const db = await getDb();
+  const lib = libraryCondition(library);
   const rows = await db.getAllAsync<{ bodyPart: string }>(
-    "SELECT DISTINCT bodyPart FROM exercises WHERE bodyPart IS NOT NULL AND bodyPart != '' ORDER BY bodyPart"
+    `SELECT DISTINCT bodyPart FROM exercises
+     WHERE bodyPart IS NOT NULL AND bodyPart != '' ${lib ? `AND ${lib}` : ''}
+     ORDER BY bodyPart`
   );
   return rows.map(r => r.bodyPart);
 }
 
-export async function getEquipment(): Promise<string[]> {
+export async function getEquipment(library: ExerciseLibrary = 'all'): Promise<string[]> {
   const db = await getDb();
+  const lib = libraryCondition(library);
   const rows = await db.getAllAsync<{ equipment: string }>(
-    "SELECT DISTINCT equipment FROM exercises WHERE equipment IS NOT NULL AND equipment != '' ORDER BY equipment"
+    `SELECT DISTINCT equipment FROM exercises
+     WHERE equipment IS NOT NULL AND equipment != '' ${lib ? `AND ${lib}` : ''}
+     ORDER BY equipment`
   );
   return rows.map(r => r.equipment);
 }

@@ -6,8 +6,8 @@ import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
-import { getDb, getSetting, setSetting, insertExercisesBatch } from './src/database';
-import { loadLocalExercises } from './src/data/localExercises';
+import { getDb } from './src/database';
+import { ensureExerciseLibraries } from './src/data/seed';
 import AppNavigator from './src/navigation/AppNavigator';
 import { COLORS } from './src/theme';
 
@@ -24,18 +24,8 @@ export default function App() {
   async function init() {
     try {
       await getDb();
-      const synced = await getSetting('exercises_synced');
-      if (synced === 'true') {
-        setInitState('ready');
-        return;
-      }
-
       setInitState('syncing');
-
-      const exercises = loadLocalExercises();
-      await insertExercisesBatch(exercises);
-      await setSetting('exercises_synced', 'true');
-
+      await ensureExerciseLibraries();
       setInitState('ready');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

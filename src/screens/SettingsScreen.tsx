@@ -17,12 +17,11 @@ import {
   getExerciseCount,
   getSetting,
   setSetting,
-  deleteSetting,
   clearExercises,
-  insertExercisesBatch,
   clearAllData,
 } from '../database';
-import { loadLocalExercises } from '../data/localExercises';
+import { ensureExerciseLibraries } from '../data/seed';
+import ImportTemplatesModal from '../components/ImportTemplatesModal';
 
 type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
 
@@ -32,6 +31,7 @@ export default function SettingsScreen() {
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [showImport, setShowImport] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -52,10 +52,8 @@ export default function SettingsScreen() {
     setSyncStatus('syncing');
     setSyncError(null);
     try {
-      const exercises = loadLocalExercises();
       await clearExercises();
-      await insertExercisesBatch(exercises);
-      await setSetting('exercises_synced', 'true');
+      await ensureExerciseLibraries(true);
       await setSetting('exercises_synced_at', new Date().toISOString());
       await loadInfo();
       setSyncStatus('success');
@@ -79,8 +77,7 @@ export default function SettingsScreen() {
           onPress: async () => {
             await clearAllData();
             // Restore the built-in exercise library so the app stays usable
-            await insertExercisesBatch(loadLocalExercises());
-            await setSetting('exercises_synced', 'true');
+            await ensureExerciseLibraries(true);
             await loadInfo();
             Alert.alert('Klart', 'All data har rensats.');
           },
@@ -168,6 +165,21 @@ export default function SettingsScreen() {
         </View>
 
         {/* About */}
+        <Text style={s.sectionLabel}>PASS FRÅN DATORN</Text>
+        <View style={s.card}>
+          <View style={s.infoRow}>
+            <Ionicons name="cloud-download-outline" size={20} color={COLORS.accent} />
+            <View style={s.infoText}>
+              <Text style={s.infoTitle}>Importera pass</Text>
+              <Text style={s.infoSub}>Klistra in pass skrivna på datorn (JSON-format)</Text>
+            </View>
+          </View>
+          <TouchableOpacity style={s.syncBtn} onPress={() => setShowImport(true)}>
+            <Ionicons name="clipboard-outline" size={18} color="#fff" />
+            <Text style={s.syncBtnText}>Klistra in & importera</Text>
+          </TouchableOpacity>
+        </View>
+
         <Text style={s.sectionLabel}>OM APPEN</Text>
         <View style={s.card}>
           <View style={s.infoRow}>
@@ -188,6 +200,7 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      <ImportTemplatesModal visible={showImport} onClose={() => setShowImport(false)} />
     </SafeAreaView>
   );
 }

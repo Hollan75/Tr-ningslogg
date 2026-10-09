@@ -16,12 +16,19 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { COLORS, RADIUS } from '../theme';
 import { getExercises, getBodyParts, getEquipment } from '../database';
+import type { ExerciseLibrary } from '../database';
 import ExerciseFormModal from '../components/ExerciseFormModal';
 import { parseMuscles } from '../utils/format';
 import type { Exercise } from '../types';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+const LIBRARY_OPTIONS: { value: ExerciseLibrary; label: string }[] = [
+  { value: 'sv', label: 'Svenska' },
+  { value: 'all', label: 'Alla + engelska' },
+  { value: 'custom', label: 'Mina' },
+];
 
 export default function ExercisesScreen() {
   const navigation = useNavigation<Nav>();
@@ -33,29 +40,35 @@ export default function ExercisesScreen() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [onlyCustom, setOnlyCustom] = useState(false);
+  const [library, setLibrary] = useState<ExerciseLibrary>('sv');
   const [reloadKey, setReloadKey] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
-      Promise.all([getBodyParts(), getEquipment()]).then(([bp, eq]) => {
-        setBodyParts(bp);
-        setEquipments(eq);
-      });
       // Reload list when returning (an exercise may have been edited or deleted)
       setReloadKey(k => k + 1);
     }, [])
   );
 
   useEffect(() => {
+    Promise.all([getBodyParts(library), getEquipment(library)]).then(([bp, eq]) => {
+      setBodyParts(bp);
+      setEquipments(eq);
+      // Drop filters that don't exist in the selected library
+      setBodyPart(cur => (cur && !bp.includes(cur) ? null : cur));
+      setEquip(cur => (cur && !eq.includes(cur) ? null : cur));
+    });
+  }, [library, reloadKey]);
+
+  useEffect(() => {
     const timer = setTimeout(() => {
       setLoading(true);
-      getExercises(search || undefined, bodyPart ?? undefined, equip ?? undefined, onlyCustom)
+      getExercises(search || undefined, bodyPart ?? undefined, equip ?? undefined, library)
         .then(setExercises)
         .finally(() => setLoading(false));
     }, 250);
     return () => clearTimeout(timer);
-  }, [search, bodyPart, equip, onlyCustom, reloadKey]);
+  }, [search, bodyPart, equip, library, reloadKey]);
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -90,18 +103,15 @@ export default function ExercisesScreen() {
         <View style={s.filterRow}>
           <Text style={s.filterLabel}>Visa</Text>
           <View style={s.chipsRow}>
-            <TouchableOpacity
-              style={[s.chip, !onlyCustom && s.chipActive]}
-              onPress={() => setOnlyCustom(false)}
-            >
-              <Text style={[s.chipText, !onlyCustom && s.chipTextActive]}>Alla</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.chip, onlyCustom && s.chipActive]}
-              onPress={() => setOnlyCustom(true)}
-            >
-              <Text style={[s.chipText, onlyCustom && s.chipTextActive]}>Mina övningar</Text>
-            </TouchableOpacity>
+            {LIBRARY_OPTIONS.map(opt => (
+              <TouchableOpacity
+                key={opt.value}
+                style={[s.chip, library === opt.value && s.chipActive]}
+                onPress={() => setLibrary(opt.value)}
+              >
+                <Text style={[s.chipText, library === opt.value && s.chipTextActive]}>{opt.label}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
         {bodyParts.length > 0 && (
@@ -136,7 +146,7 @@ export default function ExercisesScreen() {
       ) : exercises.length === 0 ? (
         <View style={s.center}>
           <Text style={s.empty}>
-            {onlyCustom && !search && !bodyPart && !equip
+            {library === 'custom' && !search && !bodyPart && !equip
               ? 'Du har inga egna övningar än – tryck "Ny övning" för att skapa en.'
               : search || bodyPart || equip
               ? 'Inga träffar – prova andra filter'

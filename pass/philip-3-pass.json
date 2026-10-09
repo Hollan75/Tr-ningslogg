@@ -1,0 +1,45 @@
+{
+  "pass": [
+    {
+      "namn": "Pass A – Ben, säte & axelrehab",
+      "övningar": [
+        { "övning": "90/90 höftrörlighet", "set": 1, "reps": 8, "vila": 0 },
+        { "övning": "Utåtrotation med gummiband", "set": 2, "reps": 15, "vila": 30 },
+        { "övning": "Goblet-knäböj", "set": 3, "reps": 10, "kg": 16, "vila": 90 },
+        { "övning": "Höftlyft med skivstång (hip thrust)", "set": 3, "reps": 10, "kg": 40, "vila": 90 },
+        { "övning": "Bakåtutfall", "set": 3, "reps": 8, "kg": 10, "vila": 75 },
+        { "övning": "Sidoliggande benlyft", "set": 2, "reps": 15, "vila": 30 },
+        { "övning": "Face pull", "set": 3, "reps": 15, "kg": 10, "vila": 45 },
+        { "övning": "Pallof press", "set": 3, "reps": 10, "kg": 8, "vila": 45 }
+      ]
+    },
+    {
+      "namn": "Pass B – Rygg, hållning & core",
+      "övningar": [
+        { "övning": "Bröstryggsextension på foamroller", "set": 1, "reps": 10, "vila": 0 },
+        { "övning": "Band pull-apart", "set": 2, "reps": 15, "vila": 30 },
+        { "övning": "Latsdrag", "set": 3, "reps": 10, "kg": 40, "vila": 90 },
+        { "övning": "Bröststödd hantelrodd", "set": 3, "reps": 10, "kg": 14, "vila": 75 },
+        { "övning": "Landmine-press", "set": 3, "reps": 8, "kg": 15, "vila": 75 },
+        { "övning": "Rumänska marklyft", "set": 3, "reps": 8, "kg": 40, "vila": 90 },
+        { "övning": "Y-T-W på lutande bänk", "set": 2, "reps": 8, "vila": 45 },
+        { "övning": "Dead bug", "set": 3, "reps": 8, "vila": 30 },
+        { "övning": "Resväskebärning (en hand)", "set": 2, "reps": 30, "kg": 16, "vila": 45 }
+      ]
+    },
+    {
+      "namn": "Pass C – Helkropp & stabilitet",
+      "övningar": [
+        { "övning": "Världens bästa stretch", "set": 1, "reps": 5, "vila": 0 },
+        { "övning": "Sidoliggande utåtrotation med hantel", "set": 2, "reps": 12, "kg": 2, "vila": 30 },
+        { "övning": "Marklyft med trap bar", "set": 3, "reps": 6, "kg": 60, "vila": 120 },
+        { "övning": "Hantelpress på bänk", "set": 3, "reps": 10, "kg": 16, "vila": 90 },
+        { "övning": "Enbens-marklyft med hantel", "set": 3, "reps": 8, "kg": 10, "vila": 60 },
+        { "övning": "TRX-rodd", "set": 3, "reps": 12, "vila": 60 },
+        { "övning": "Copenhagen-planka (kort hävarm)", "set": 2, "reps": 20, "vila": 45 },
+        { "övning": "Sidoplanka", "set": 2, "reps": 30, "vila": 30 },
+        { "övning": "Bondgång (farmer's walk)", "set": 3, "reps": 40, "kg": 20, "vila": 60 }
+      ]
+    }
+  ]
+}
