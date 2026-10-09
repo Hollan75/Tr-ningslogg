@@ -3,15 +3,14 @@ import {
   View,
   Text,
   TextInput,
-  ScrollView,
   StyleSheet,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
@@ -192,8 +191,11 @@ export default function CreateTemplateScreen() {
           <ActivityIndicator color={COLORS.accent} />
         </View>
       ) : (
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+          <KeyboardAwareScrollView
+            contentContainerStyle={s.content}
+            keyboardShouldPersistTaps="handled"
+            bottomOffset={24}
+          >
             <TextInput
               style={s.nameInput}
               placeholder="Namn på passet"
@@ -255,8 +257,7 @@ export default function CreateTemplateScreen() {
               <Ionicons name="add-circle-outline" size={20} color={COLORS.accent} />
               <Text style={s.addText}>Lägg till övning</Text>
             </TouchableOpacity>
-          </ScrollView>
-        </KeyboardAvoidingView>
+          </KeyboardAwareScrollView>
       )}
 
       <ExercisePicker

@@ -8,10 +8,10 @@ import {
   Modal,
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 import { COLORS, RADIUS } from '../theme';
 import { importTemplatesFromJson } from '../utils/importTemplates';
@@ -65,7 +65,7 @@ export default function ImportTemplatesModal({ visible, onClose }: Props) {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaProvider>
-        <KeyboardAvoidingView style={s.wrap} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView style={s.wrap} behavior="padding">
           <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
             <View style={s.header}>
               <TouchableOpacity onPress={onClose} hitSlop={10}>

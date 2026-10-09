@@ -8,11 +8,12 @@ import {
   StyleSheet,
   ActivityIndicator,
   Modal,
-  KeyboardAvoidingView,
   Platform,
   Alert,
 } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 
 import { COLORS, RADIUS } from '../theme';
 import { insertExercise } from '../database';
@@ -31,19 +32,23 @@ interface Props {
 
 export default function ExerciseFormModal({ visible, exercise, initialName, onClose, onSaved }: Props) {
   const [name, setName] = useState('');
-  const [bp, setBp] = useState('');
+  const [groups, setGroups] = useState<string[]>([]);
   const [eq, setEq] = useState('');
   const [instr, setInstr] = useState('');
   const [saving, setSaving] = useState(false);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
 
   useEffect(() => {
     if (!visible) return;
     setName(exercise?.name ?? initialName ?? '');
-    setBp(exercise ? exercise.bodyPart ?? parseMuscles(exercise.primaryMuscles)[0] ?? '' : '');
+    // Groups are stored in primaryMuscles; bodyPart holds the first one
+    const stored = exercise
+      ? [exercise.bodyPart, ...parseMuscles(exercise.primaryMuscles)]
+          .map(g => toGroup(g))
+          .filter((g): g is string => !!g && MUSCLE_GROUPS.includes(g))
+      : [];
+    setGroups([...new Set(stored)]);
     setEq(exercise?.equipment ?? '');
     setInstr(exercise?.instructions ?? '');
-    setSuggestions(MUSCLE_GROUPS);
   }, [visible, exercise, initialName]);
 
   async function handleSave() {
@@ -53,8 +58,8 @@ export default function ExerciseFormModal({ visible, exercise, initialName, onCl
     }
     setSaving(true);
     try {
-      const group = toGroup(bp.trim() || null);
-      const muscles = group ? [group] : [];
+      // Keep the fixed order so the "main" group is predictable
+      const muscles = MUSCLE_GROUPS.filter(g => groups.includes(g));
       const saved: Exercise = {
         id: exercise?.id ?? `custom_${Date.now()}`,
         name: name.trim(),
@@ -62,7 +67,7 @@ export default function ExerciseFormModal({ visible, exercise, initialName, onCl
         primaryMuscles: JSON.stringify(muscles),
         secondaryMuscles: exercise?.secondaryMuscles ?? '[]',
         equipment: toEquipment(eq.trim() || null),
-        bodyPart: group,
+        bodyPart: muscles[0] ?? null,
         gifUrl: null,
         instructions: instr.trim() || null,
         difficulty: null,
@@ -76,12 +81,14 @@ export default function ExerciseFormModal({ visible, exercise, initialName, onCl
     }
   }
 
-  const filteredSuggestions = suggestions;
+  function toggleGroup(g: string) {
+    setGroups(cur => (cur.includes(g) ? cur.filter(x => x !== g) : [...cur, g]));
+  }
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaProvider>
-        <KeyboardAvoidingView style={m.wrap} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={m.wrap}>
           <SafeAreaView style={m.safe} edges={['top', 'bottom']}>
             <View style={m.header}>
               <TouchableOpacity onPress={onClose} hitSlop={10}>
@@ -97,23 +104,29 @@ export default function ExerciseFormModal({ visible, exercise, initialName, onCl
               </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={m.content} keyboardShouldPersistTaps="handled">
+            <KeyboardAwareScrollView
+              contentContainerStyle={m.content}
+              keyboardShouldPersistTaps="handled"
+              bottomOffset={24}
+            >
               <Field label="Namn *" placeholder="t.ex. Hantelcurl" value={name} onChangeText={setName} autoFocus={!exercise} />
               <View style={m.field}>
-                <Field label="Muskelgrupp" placeholder="Välj nedan eller skriv egen" value={bp} onChangeText={setBp} />
-                {filteredSuggestions.length > 0 && (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={m.chips} keyboardShouldPersistTaps="handled">
-                    {filteredSuggestions.map(s => (
+                <Text style={m.label}>Muskelgrupper (välj en eller flera)</Text>
+                <View style={m.chips}>
+                  {MUSCLE_GROUPS.map(g => {
+                    const on = groups.includes(g);
+                    return (
                       <TouchableOpacity
-                        key={s}
-                        style={[m.chip, bp === s && m.chipActive]}
-                        onPress={() => setBp(s)}
+                        key={g}
+                        style={[m.chip, on && m.chipActive]}
+                        onPress={() => toggleGroup(g)}
                       >
-                        <Text style={[m.chipText, bp === s && m.chipTextActive]}>{s}</Text>
+                        {on && <Ionicons name="checkmark" size={14} color={COLORS.accent} />}
+                        <Text style={[m.chipText, on && m.chipTextActive]}>{g}</Text>
                       </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                )}
+                    );
+                  })}
+                </View>
               </View>
               <Field label="Utrustning" placeholder="t.ex. hantel, kabel, kroppsvikt" value={eq} onChangeText={setEq} />
               <Field
@@ -123,9 +136,9 @@ export default function ExerciseFormModal({ visible, exercise, initialName, onCl
                 onChangeText={setInstr}
                 multiline
               />
-            </ScrollView>
+            </KeyboardAwareScrollView>
           </SafeAreaView>
-        </KeyboardAvoidingView>
+        </View>
       </SafeAreaProvider>
     </Modal>
   );
@@ -198,12 +211,15 @@ const m = StyleSheet.create({
     paddingVertical: 12,
   },
   multiline: { minHeight: 110, textAlignVertical: 'top' },
-  chips: { gap: 6, paddingVertical: 2 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: COLORS.surface2,
     borderRadius: RADIUS.full,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderWidth: 1,
     borderColor: COLORS.border,
   },

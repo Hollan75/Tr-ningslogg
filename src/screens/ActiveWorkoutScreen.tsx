@@ -7,13 +7,13 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
-  KeyboardAvoidingView,
   Platform,
   Vibration,
   Modal,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
@@ -494,16 +494,17 @@ export default function ActiveWorkoutScreen() {
         />
       </View>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <View style={{ flex: 1 }}>
         {loading ? (
           <View style={s.center}>
             <ActivityIndicator color={COLORS.accent} />
           </View>
         ) : (
-          <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+          <KeyboardAwareScrollView
+            contentContainerStyle={s.content}
+            keyboardShouldPersistTaps="handled"
+            bottomOffset={24}
+          >
             {exercises.length === 0 && (
               <View style={s.emptyWrap}>
                 <Ionicons name="barbell-outline" size={44} color={COLORS.textMuted} />
@@ -641,9 +642,9 @@ export default function ActiveWorkoutScreen() {
                 <Text style={s.bottomStartText}>Starta passet</Text>
               </TouchableOpacity>
             )}
-          </ScrollView>
+          </KeyboardAwareScrollView>
         )}
-      </KeyboardAvoidingView>
+      </View>
 
       {rest.active && (
         <View style={s.restBar}>

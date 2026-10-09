@@ -222,8 +222,9 @@ export async function getExercises(
     params.push(q, q);
   }
   if (bodyPart) {
-    conditions.push('bodyPart = ?');
-    params.push(bodyPart);
+    // Custom exercises can belong to several groups (stored in primaryMuscles)
+    conditions.push("(bodyPart = ? OR (id LIKE 'custom_%' AND primaryMuscles LIKE ?))");
+    params.push(bodyPart, `%"${bodyPart}"%`);
   }
   if (equipment) {
     conditions.push('equipment = ?');
@@ -297,11 +298,23 @@ export async function getBodyParts(library: ExerciseLibrary = 'all'): Promise<st
      WHERE bodyPart IS NOT NULL AND bodyPart != '' ${lib ? `AND ${lib}` : ''}
      ORDER BY bodyPart`
   );
+  const groups = new Set(rows.map(r => r.bodyPart));
+  // Custom exercises may list extra groups in primaryMuscles
+  const custom = await db.getAllAsync<{ primaryMuscles: string }>(
+    "SELECT primaryMuscles FROM exercises WHERE id LIKE 'custom_%'"
+  );
+  for (const c of custom) {
+    try {
+      for (const g of JSON.parse(c.primaryMuscles ?? '[]')) if (MUSCLE_GROUPS.includes(g)) groups.add(g);
+    } catch {
+      // ignore malformed rows
+    }
+  }
   const order = (g: string) => {
     const i = MUSCLE_GROUPS.indexOf(g);
     return i === -1 ? MUSCLE_GROUPS.length : i;
   };
-  return rows.map(r => r.bodyPart).sort((a, b) => order(a) - order(b) || a.localeCompare(b, 'sv'));
+  return [...groups].sort((a, b) => order(a) - order(b) || a.localeCompare(b, 'sv'));
 }
 
 export async function getEquipment(library: ExerciseLibrary = 'all'): Promise<string[]> {
