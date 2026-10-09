@@ -228,7 +228,7 @@ details.more[open] > summary { margin-bottom: 8px; }
   <div class="wrap">
     <div class="brand">
       <h1>Resekompassen</h1>
-      <p>Flyg, boende och evenemang utifrån dina ledigheter och intressen · <span class="mono" id="appVersion">v8</span></p>
+      <p>Flyg, boende och evenemang utifrån dina ledigheter och intressen · <span class="mono" id="appVersion">v9</span></p>
     </div>
     <div class="flap" id="flap" aria-label="Aktuell rutt"></div>
   </div>
@@ -399,7 +399,7 @@ details.more[open] > summary { margin-bottom: 8px; }
 (() => {
 "use strict";
 // Visa fel synligt, så att de går att skärmdumpa på telefonen.
-const showErr = msg => { const b = document.getElementById("errBar"); if (!b) return; b.hidden = false; b.textContent = "Fel (v8): " + String(msg).slice(0, 300) + " · Ta en skärmdump och skicka till Claude."; };
+const showErr = msg => { const b = document.getElementById("errBar"); if (!b) return; b.hidden = false; b.textContent = "Fel (v9): " + String(msg).slice(0, 300) + " · Ta en skärmdump och skicka till Claude."; };
 window.addEventListener("error", e => showErr(e.message || e.error || "okänt fel"));
 window.addEventListener("unhandledrejection", e => { const r = e.reason; if (r && (r.code === "cancelled")) return; showErr((r && (r.message || r.code)) || r || "okänt fel"); });
 
@@ -528,11 +528,12 @@ async function initStore() {
     if (db && id) {
       store.db = db; store.uid = id; store.mode = "db";
       const snap = await profileRef().get();
-      if (snap.exists) applyData(snap.data());
+      // Data från db levereras fryst (skrivskyddad): arbeta alltid på en kopia.
+      if (snap.exists) applyData(thaw(snap.data()));
       const cs = await chatRef().get();
-      if (cs.exists && Array.isArray(cs.data().messages)) state.chat = cs.data().messages;
+      if (cs.exists && Array.isArray(cs.data().messages)) state.chat = thaw(cs.data().messages);
       const ts = await tripsRef().get();
-      state.trips = ts.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.savedAt || "").localeCompare(a.savedAt || ""));
+      state.trips = ts.docs.map(d => ({ id: d.id, ...thaw(d.data()) })).sort((a, b) => (b.savedAt || "").localeCompare(a.savedAt || ""));
       renderAll();
     }
   } catch (e) { console.warn("db", e); }
@@ -541,6 +542,7 @@ async function initStore() {
 const profileRef = () => store.db.doc(`data/users/${store.uid}/profile`);
 const tripsRef = () => profileRef().collection("trips");
 const chatRef = () => store.db.doc(`data/users/${store.uid}/chat`);
+function thaw(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
 function applyData(d) {
   if (!d) return;
   if (d.profile) { state.profile = { ...DEFAULT_PROFILE, ...d.profile }; state.profileSaved = true; }
