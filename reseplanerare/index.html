@@ -336,7 +336,7 @@ pre.ics { white-space: pre-wrap; word-break: break-all; font-family: var(--f-mon
           <select id="fStars"><option value="2">2 stjärnor</option><option value="3">3 stjärnor</option><option value="4">4 stjärnor</option><option value="5">5 stjärnor</option></select></div>
         <div class="field"><label class="label" for="fArea">Läge</label>
           <select id="fArea"><option value="centralt">Centralt, gångavstånd</option><option value="lugnt">Lugnt område</option><option value="nära stranden">Nära stranden</option><option value="nära evenemanget">Nära evenemanget</option></select></div>
-        <div class="field"><label class="label" for="fLoyalty">Lojalitetsprogram</label><input id="fLoyalty" placeholder="t.ex. EuroBonus, Genius"></div>
+        <div class="field"><label class="label" for="fLoyalty">Lojalitetsprogram</label><input id="fLoyalty" placeholder="t.ex. EuroBonus, Genius, One Key (Hotels.com)"></div>
       </div>
       <div class="field">
         <span class="label">Intressen</span>
@@ -561,7 +561,7 @@ function profileText() {
     `Byten: ${p.stops === "0" ? "bara direktflyg" : p.stops === "1" ? "max 1 byte" : "spelar ingen roll"}`,
     `Föredragen avgångstid: ${p.time}`, `Bagage: ${p.bag}`,
     `Boende: ${p.stay}, minst ${p.stars} stjärnor, läge: ${p.area}`,
-    p.loyalty && `Lojalitetsprogram: ${p.loyalty}`,
+    p.loyalty && `Lojalitetsprogram: ${p.loyalty}${/one key|hotels\.com|expedia/i.test(p.loyalty) ? " (One Key delas av Hotels.com, Expedia och Vrbo: lyft gärna fram boenden som går att boka där)" : ""}`,
     `Tempo: ${p.pace}`, p.diet && `Kost: ${p.diet}`, p.notes && `Övrigt: ${p.notes}`,
     (p.memories || []).length && `Att komma ihåg: ${p.memories.map(m => m.text).join("; ")}`,
     state.wishes.length && `Resdrömmar och planer: ${state.wishes.map(w => [w.title, w.destination, w.when].filter(Boolean).join(", ")).join("; ")}`,
@@ -590,6 +590,7 @@ function linkSet({ origin, dest, iata, from, to, adults, children }) {
   ];
   const stays = [
     ext(`https://www.booking.com/searchresults.sv.html?ss=${encodeURIComponent(city)}&checkin=${from}&checkout=${to}&group_adults=${adults || 1}&group_children=${children || 0}&no_rooms=1`, "Booking.com"),
+    ext(`https://sv.hotels.com/Hotel-Search?destination=${encodeURIComponent(city)}&startDate=${from}&endDate=${to}&adults=${adults || 1}&rooms=1`, "Hotels.com"),
     ext(`https://www.airbnb.se/s/${encodeURIComponent(city)}/homes?checkin=${from}&checkout=${to}&adults=${adults || 1}&children=${children || 0}`, "Airbnb"),
     ext(`https://www.google.com/travel/hotels/${encodeURIComponent(city)}?q=${encodeURIComponent(`hotell ${city}`)}&dates=${from},${to}&hl=sv`, "Google Hotels"),
   ];
@@ -742,7 +743,9 @@ function renderPlan(plan, i, out, opts = {}) {
     s.type && h("span", { class: "label" }, s.type),
     h("p", { class: "small" }, s.why || ""),
     Array.isArray(s.examples) && s.examples.length ? h("p", { class: "small muted" }, "T.ex. " + s.examples.join(", ")) : null,
-    ext(`https://www.booking.com/searchresults.sv.html?ss=${encodeURIComponent(`${s.area}, ${city}`)}&checkin=${i.from}&checkout=${i.to}&group_adults=${state.profile.adults}&group_children=${state.profile.children}&no_rooms=1`, "Sök i området", "small")))));
+    h("div", { class: "actions small" },
+      ext(`https://www.booking.com/searchresults.sv.html?ss=${encodeURIComponent(`${s.area}, ${city}`)}&checkin=${i.from}&checkout=${i.to}&group_adults=${state.profile.adults}&group_children=${state.profile.children}&no_rooms=1`, "Booking.com", "small"),
+      ext(`https://sv.hotels.com/Hotel-Search?destination=${encodeURIComponent(`${s.area}, ${city}`)}&startDate=${i.from}&endDate=${i.to}&adults=${state.profile.adults}&rooms=1`, "Hotels.com", "small"))))));
 
   // Evenemang
   nodes.push(h("h3", null, "Händer när du är där"));
