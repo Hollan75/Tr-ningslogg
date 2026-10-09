@@ -1,0 +1,1028 @@
+<title>Resekompassen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: en flygstrimla-header med rutten i stora IATA-koder, flikar under, innehåll i en kolumn (max 980px) med kort för flyg/boende/evenemang. */
+:root {
+  --bg: #eef1ee;
+  --surface: #fbfcfa;
+  --surface-2: #e3e8e4;
+  --ink: #16202a;
+  --muted: #56626c;
+  --line: #cfd6d1;
+  --accent: #c98a07;      /* avgångstavlans bärnsten */
+  --accent-ink: #1b1400;
+  --sky: #2d6a9a;
+  --good: #2f7d4f;
+  --warn: #a45f00;
+  --bad: #b23a3a;
+  --board: #17212b;       /* tavla i headern, mörk i båda teman */
+  --board-ink: #f2c14e;
+  --board-sub: #9fb0bd;
+  --f-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --f-body: "Barlow", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151b; --surface: #17202a; --surface-2: #1f2a35; --ink: #e7ecef; --muted: #9aa8b3;
+    --line: #2c3a46; --accent: #f2b632; --accent-ink: #1b1400; --sky: #74aee0; --good: #5fc489;
+    --warn: #f0a640; --bad: #f07a7a; --board: #0a0f14; --board-ink: #f2c14e; --board-sub: #8a9aa7;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151b; --surface: #17202a; --surface-2: #1f2a35; --ink: #e7ecef; --muted: #9aa8b3;
+  --line: #2c3a46; --accent: #f2b632; --accent-ink: #1b1400; --sky: #74aee0; --good: #5fc489;
+  --warn: #f0a640; --bad: #f07a7a; --board: #0a0f14; --board-ink: #f2c14e; --board-sub: #8a9aa7;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 980px; margin: 0 auto; padding-inline: 16px; padding-block: 0 48px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; line-height: 1.1; text-wrap: balance; margin: 0; letter-spacing: .01em; }
+h2 { font-size: 1.7rem; }
+h3 { font-size: 1.25rem; }
+p { margin: 0; }
+a { color: var(--sky); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.small { font-size: .85rem; }
+.label { font-family: var(--f-display); text-transform: uppercase; letter-spacing: .08em; font-size: .8rem; color: var(--muted); font-weight: 600; }
+
+/* Header – avgångstavla */
+.board { background: var(--board); color: var(--board-ink); padding-block: 18px 14px; }
+.board .wrap { padding-block: 0; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
+.brand { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.brand h1 { font-size: 2.1rem; color: var(--board-ink); letter-spacing: .04em; text-transform: uppercase; }
+.brand p { color: var(--board-sub); font-size: .9rem; }
+.flap { display: flex; align-items: center; gap: 8px; font-family: var(--f-mono); font-weight: 600; }
+.flap .cell { background: #00000055; border: 1px solid #ffffff1a; border-radius: 4px; padding: 4px 8px; font-size: 1.5rem; letter-spacing: .12em; color: var(--board-ink); position: relative; }
+.flap .cell::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid #00000080; }
+.flap .arrow { color: var(--board-sub); font-size: 1.1rem; }
+.flap .when { color: var(--board-sub); font-size: .8rem; letter-spacing: .04em; margin-left: 4px; }
+
+/* Flikar */
+.tabs { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+.tabs .wrap { padding-block: 0; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.tab { background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 10px 9px; font-family: var(--f-display); font-size: 1.05rem; font-weight: 600; letter-spacing: .03em; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tab:hover { color: var(--ink); }
+
+section.panel { display: grid; gap: 20px; padding-top: 22px; }
+.intro { max-width: 65ch; color: var(--muted); }
+
+/* Formulär */
+.form { display: grid; gap: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; }
+.row { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field input, .field select, .field textarea { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; min-width: 0; }
+.field textarea { min-height: 70px; resize: vertical; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 9px 14px; cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: var(--ink); }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.05); }
+.btn.ghost { background: transparent; }
+.btn.sm { padding: 6px 10px; font-size: .88rem; }
+.btn[disabled] { opacity: .55; cursor: progress; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: 5px 11px; cursor: pointer; font-size: .9rem; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.chip.static { cursor: default; }
+.tag { display: inline-block; border-radius: 4px; padding: 1px 7px; font-size: .75rem; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; font-family: var(--f-display); }
+.tag.sure { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }
+.tag.likely { background: color-mix(in srgb, var(--sky) 18%, transparent); color: var(--sky); }
+.tag.unsure { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
+.tag.example { background: var(--surface-2); color: var(--muted); }
+
+/* Länkrad */
+.links { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.linkgroup { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; display: grid; gap: 8px; align-content: start; }
+.linkgroup .chips a { text-decoration: none; }
+
+/* Resultat */
+.strip { display: grid; grid-template-columns: auto 1fr; gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.strip .stub { background: var(--surface-2); padding: 12px 14px; display: grid; align-content: center; gap: 2px; border-right: 2px dashed var(--line); min-width: 104px; }
+.strip .stub .big { font-family: var(--f-display); font-size: 1.15rem; font-weight: 700; }
+.strip .body { padding: 12px 14px; display: grid; gap: 6px; min-width: 0; }
+.strip .top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; align-items: baseline; }
+.price { font-family: var(--f-mono); font-weight: 600; white-space: nowrap; }
+.grid2 { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.event { display: grid; grid-template-columns: 74px 1fr; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.event:first-child { border-top: 0; }
+.datebox { text-align: center; border: 1px solid var(--line); border-radius: 8px; padding: 6px 4px; background: var(--surface); align-self: start; }
+.datebox .d { font-family: var(--f-display); font-size: 1.6rem; font-weight: 700; line-height: 1; }
+.datebox .m { font-family: var(--f-display); text-transform: uppercase; font-size: .8rem; letter-spacing: .08em; color: var(--muted); }
+.list { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 4px 14px; }
+.sechead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 12px; }
+.note { border-left: 3px solid var(--accent); background: var(--surface); padding: 10px 12px; border-radius: 0 8px 8px 0; font-size: .9rem; color: var(--muted); max-width: 75ch; }
+.status { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: var(--surface); border: 1px dashed var(--line); border-radius: var(--r); color: var(--muted); }
+.status.err { border-style: solid; border-color: var(--bad); color: var(--bad); }
+.spinner { width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .9s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+.empty { padding: 22px 16px; text-align: left; background: var(--surface); border: 1px dashed var(--line); border-radius: var(--r); color: var(--muted); display: grid; gap: 6px; }
+
+/* Ledighetskalender */
+.leave { display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
+.leave:first-child { border-top: 0; }
+.ratio { font-family: var(--f-display); font-weight: 700; font-size: 1.35rem; white-space: nowrap; }
+.ratio small { font-size: .85rem; color: var(--muted); font-weight: 600; }
+.bar { display: flex; gap: 2px; margin-top: 6px; flex-wrap: wrap; }
+.bar i { width: 14px; height: 14px; border-radius: 3px; background: var(--surface-2); display: block; }
+.bar i.w { background: var(--accent); }
+.bar i.h { background: var(--sky); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: .82rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+/* Dagsplan */
+.day { display: grid; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line); }
+.day:first-child { border-top: 0; }
+.item { display: grid; grid-template-columns: 56px 1fr; gap: 10px; }
+.item .t { font-family: var(--f-mono); color: var(--muted); font-size: .85rem; padding-top: 2px; }
+pre.ics { white-space: pre-wrap; word-break: break-all; font-family: var(--f-mono); font-size: .75rem; background: var(--surface-2); padding: 10px; border-radius: 8px; max-height: 200px; overflow: auto; }
+
+.confirm { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-weight: 500; z-index: 20; max-width: calc(100% - 32px); }
+@media (max-width: 520px) {
+  .brand h1 { font-size: 1.7rem; }
+  .flap .cell { font-size: 1.15rem; }
+  .strip { grid-template-columns: 1fr; }
+  .strip .stub { border-right: 0; border-bottom: 2px dashed var(--line); grid-auto-flow: column; justify-content: start; gap: 10px; align-items: baseline; }
+  .event { grid-template-columns: 60px 1fr; }
+}
+</style>
+
+<header class="board">
+  <div class="wrap">
+    <div class="brand">
+      <h1>Resekompassen</h1>
+      <p>Flyg, boende och evenemang utifrån dina ledigheter och intressen</p>
+    </div>
+    <div class="flap" id="flap" aria-label="Aktuell rutt"></div>
+  </div>
+</header>
+
+<nav class="tabs" aria-label="Sektioner">
+  <div class="wrap" role="tablist">
+    <button class="tab" role="tab" data-tab="plan" id="tab-plan">Planera resa</button>
+    <button class="tab" role="tab" data-tab="discover" id="tab-discover">Upptäck evenemang</button>
+    <button class="tab" role="tab" data-tab="leave" id="tab-leave">Ledigheter</button>
+    <button class="tab" role="tab" data-tab="saved" id="tab-saved">Sparade resor</button>
+    <button class="tab" role="tab" data-tab="profile" id="tab-profile">Profil</button>
+  </div>
+</nav>
+
+<main class="wrap">
+
+  <!-- PLANERA -->
+  <section class="panel" id="panel-plan" data-panel="plan">
+    <p class="intro">Ange resmål och datum. Bokningslänkarna nedan fylls i direkt. Tryck på <b>Hitta resa</b> så tar Claude fram flygalternativ, områden att bo i, evenemang som matchar dina intressen och billigare datum i närheten.</p>
+    <form class="form" id="planForm" autocomplete="off">
+      <div class="row">
+        <div class="field"><label class="label" for="pDest">Resmål</label><input id="pDest" placeholder="t.ex. Barcelona eller BCN" required></div>
+        <div class="field"><label class="label" for="pFrom">Utresa</label><input id="pFrom" type="date" required></div>
+        <div class="field"><label class="label" for="pTo">Hemresa</label><input id="pTo" type="date" required></div>
+        <div class="field"><label class="label" for="pFlex">Flexibla datum</label>
+          <select id="pFlex"><option value="0">Exakta datum</option><option value="1">± 1 dag</option><option value="2" selected>± 2 dagar</option><option value="3">± 3 dagar</option><option value="7">± 1 vecka</option></select></div>
+      </div>
+      <div class="field">
+        <span class="label">Intressen för den här resan</span>
+        <div class="chips" id="pInterests"></div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" type="submit" id="planBtn">Hitta resa</button>
+        <button class="btn ghost" type="button" id="planStop" hidden>Avbryt</button>
+        <span class="small muted" id="planMeta"></span>
+      </div>
+    </form>
+    <div id="planLinks"></div>
+    <div id="planOut"><div class="empty"><strong>Här hamnar din resa</strong>Flyg med tider och prisnivå, tre områden att bo i, evenemang som matchar dina intressen och billigare datum inom din flexibilitet. Sedan kan du göra en dagsplan och exportera den till kalendern.</div></div>
+  </section>
+
+  <!-- UPPTÄCK -->
+  <section class="panel" id="panel-discover" data-panel="discover" hidden>
+    <p class="intro">Börja i evenemanget i stället för datumet. Välj en period och Claude letar efter festivaler, matcher, lopp och mässor som passar dina intressen, med förslag på när du ska åka.</p>
+    <form class="form" id="discForm" autocomplete="off">
+      <div class="row">
+        <div class="field"><label class="label" for="dPeriod">Period</label><select id="dPeriod"></select></div>
+        <div class="field"><label class="label" for="dFrom">Från</label><input id="dFrom" type="date"></div>
+        <div class="field"><label class="label" for="dTo">Till</label><input id="dTo" type="date"></div>
+        <div class="field"><label class="label" for="dHours">Max flygtid</label>
+          <select id="dHours"><option value="3">3 timmar (Europa nära)</option><option value="5" selected>5 timmar (Europa)</option><option value="9">9 timmar</option><option value="24">Hela världen</option></select></div>
+      </div>
+      <div class="field">
+        <span class="label">Intressen</span>
+        <div class="chips" id="dInterests"></div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" type="submit" id="discBtn">Hitta evenemang</button>
+        <button class="btn ghost" type="button" id="discStop" hidden>Avbryt</button>
+      </div>
+    </form>
+    <div id="discOut"><div class="empty"><strong>Evenemang för din period</strong>Välj en sparad ledighet eller en klämdag ovan. Varje träff får förslag på ut- och hemresedatum och en knapp som fyller i resan åt dig.</div></div>
+  </section>
+
+  <!-- LEDIGHETER -->
+  <section class="panel" id="panel-leave" data-panel="leave" hidden>
+    <div class="sechead">
+      <h2>Klämdagar som ger mest ledighet</h2>
+      <div class="legend"><span><i style="background:var(--accent)"></i>Semesterdag</span><span><i style="background:var(--sky)"></i>Röd dag</span><span><i style="background:var(--surface-2)"></i>Helg</span></div>
+    </div>
+    <p class="intro">Räknat på svenska helgdagar för de kommande tolv månaderna. Julafton, nyårsafton och midsommarafton räknas som lediga.</p>
+    <div class="list" id="bridgeList"></div>
+    <div class="sechead"><h2>Mina ledigheter</h2></div>
+    <form class="form" id="leaveForm" autocomplete="off">
+      <div class="row">
+        <div class="field"><label class="label" for="lLabel">Namn</label><input id="lLabel" placeholder="t.ex. Höstlov"></div>
+        <div class="field"><label class="label" for="lFrom">Från</label><input id="lFrom" type="date" required></div>
+        <div class="field"><label class="label" for="lTo">Till</label><input id="lTo" type="date" required></div>
+      </div>
+      <div class="actions"><button class="btn" type="submit">Lägg till ledighet</button></div>
+    </form>
+    <div class="list" id="leaveList"></div>
+  </section>
+
+  <!-- SPARADE -->
+  <section class="panel" id="panel-saved" data-panel="saved" hidden>
+    <h2>Sparade resor</h2>
+    <div id="savedList"></div>
+  </section>
+
+  <!-- PROFIL -->
+  <section class="panel" id="panel-profile" data-panel="profile" hidden>
+    <div class="sechead"><h2>Mina resepreferenser</h2><span class="small muted" id="storeMode"></span></div>
+    <form class="form" id="profForm" autocomplete="off">
+      <div class="row">
+        <div class="field"><label class="label" for="fHome">Hemflygplats (IATA)</label><input id="fHome" maxlength="3" class="mono" placeholder="ARN"></div>
+        <div class="field"><label class="label" for="fAlt">Alternativa flygplatser</label><input id="fAlt" class="mono" placeholder="BMA, NYO, CPH"></div>
+        <div class="field"><label class="label" for="fAdults">Vuxna</label><input id="fAdults" type="number" min="1" max="9"></div>
+        <div class="field"><label class="label" for="fChildren">Barn</label><input id="fChildren" type="number" min="0" max="9"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label class="label" for="fBudget">Budget per resa (kr, totalt)</label><input id="fBudget" type="number" min="0" step="500"></div>
+        <div class="field"><label class="label" for="fStops">Byten</label>
+          <select id="fStops"><option value="0">Bara direktflyg</option><option value="1">Max 1 byte</option><option value="2">Spelar ingen roll</option></select></div>
+        <div class="field"><label class="label" for="fTime">Avgångstid</label>
+          <select id="fTime"><option value="any">Spelar ingen roll</option><option value="morgon">Tidig morgon</option><option value="dag">Mitt på dagen</option><option value="kväll">Kväll</option></select></div>
+        <div class="field"><label class="label" for="fBag">Bagage</label>
+          <select id="fBag"><option value="handbagage">Bara handbagage</option><option value="incheckat">Incheckat bagage</option></select></div>
+      </div>
+      <div class="row">
+        <div class="field"><label class="label" for="fStay">Boende</label>
+          <select id="fStay"><option value="hotell">Hotell</option><option value="lägenhet">Lägenhet</option><option value="boutique">Boutiquehotell</option><option value="vandrarhem">Vandrarhem</option><option value="vad som helst">Vad som helst</option></select></div>
+        <div class="field"><label class="label" for="fStars">Lägsta standard</label>
+          <select id="fStars"><option value="2">2 stjärnor</option><option value="3">3 stjärnor</option><option value="4">4 stjärnor</option><option value="5">5 stjärnor</option></select></div>
+        <div class="field"><label class="label" for="fArea">Läge</label>
+          <select id="fArea"><option value="centralt">Centralt, gångavstånd</option><option value="lugnt">Lugnt område</option><option value="nära stranden">Nära stranden</option><option value="nära evenemanget">Nära evenemanget</option></select></div>
+        <div class="field"><label class="label" for="fLoyalty">Lojalitetsprogram</label><input id="fLoyalty" placeholder="t.ex. EuroBonus, Genius"></div>
+      </div>
+      <div class="field">
+        <span class="label">Intressen</span>
+        <div class="chips" id="fInterests"></div>
+        <div class="actions" style="margin-top:6px">
+          <input id="fNewInterest" placeholder="Lägg till eget intresse" style="flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px">
+          <button class="btn sm" type="button" id="fAddInterest">Lägg till</button>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field"><label class="label" for="fPace">Tempo på resan</label>
+          <select id="fPace"><option value="lugnt">Lugnt, få programpunkter</option><option value="lagom">Lagom</option><option value="intensivt">Intensivt, se så mycket som möjligt</option></select></div>
+        <div class="field"><label class="label" for="fDiet">Mat och kost</label><input id="fDiet" placeholder="t.ex. vegetariskt, glutenfritt"></div>
+      </div>
+      <div class="field"><label class="label" for="fNotes">Övrigt Claude ska veta</label><textarea id="fNotes" placeholder="t.ex. vill kunna träna på hotellet, undviker nattflyg"></textarea></div>
+      <div class="actions"><button class="btn primary" type="submit">Spara profil</button><span class="small muted" id="profSaved"></span></div>
+    </form>
+  </section>
+</main>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(() => {
+"use strict";
+
+/* ---------- Hjälpare ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const pad = n => String(n).padStart(2, "0");
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parse = s => { const [y, m, d] = String(s).split("-").map(Number); return new Date(y, m - 1, d); };
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const daysBetween = (a, b) => Math.round((parse(b) - parse(a)) / 86400000);
+const validIso = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
+const fmtDay = s => parse(s).toLocaleDateString("sv-SE", { weekday: "short", day: "numeric", month: "short" });
+const fmtRange = (a, b) => `${fmtDay(a)} – ${fmtDay(b)}`;
+const kr = n => Number(n).toLocaleString("sv-SE", { maximumFractionDigits: 0 }) + " kr";
+const krRange = r => Array.isArray(r) && r.length === 2 ? `${Number(r[0]).toLocaleString("sv-SE")}–${kr(r[1])}` : (r ? kr(r) : "");
+const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+const TODAY = new Date(); TODAY.setHours(0, 0, 0, 0);
+
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  if (attrs) for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on") && typeof v === "function") el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids.flat(Infinity)) {
+    if (k == null || k === false) continue;
+    el.append(k instanceof Node ? k : document.createTextNode(String(k)));
+  }
+  return el;
+}
+const ext = (href, text, cls = "chip") => h("a", { class: cls, href, target: "_blank", rel: "noopener" }, text);
+
+let toastTimer;
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), 2600);
+}
+const safeLS = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+/* ---------- Svenska helgdagar & klämdagar ---------- */
+function easter(y) {
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4;
+  const f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), hh = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - hh - k) % 7, m = Math.floor((a + 11 * hh + 22 * l) / 451);
+  const month = Math.floor((hh + l - 7 * m + 114) / 31), day = ((hh + l - 7 * m + 114) % 31) + 1;
+  return new Date(y, month - 1, day);
+}
+function holidays(y) {
+  const H = new Map(), E = easter(y);
+  const add = (d, n) => H.set(iso(d), n);
+  add(new Date(y, 0, 1), "Nyårsdagen");
+  add(new Date(y, 0, 6), "Trettondedag jul");
+  add(addDays(E, -2), "Långfredagen");
+  add(E, "Påskdagen");
+  add(addDays(E, 1), "Annandag påsk");
+  add(new Date(y, 4, 1), "Första maj");
+  add(addDays(E, 39), "Kristi himmelsfärd");
+  add(new Date(y, 5, 6), "Nationaldagen");
+  for (let d = 19; d <= 25; d++) { const x = new Date(y, 5, d); if (x.getDay() === 5) { add(x, "Midsommarafton"); add(addDays(x, 1), "Midsommardagen"); } }
+  for (let i = 0; i < 7; i++) { const x = addDays(new Date(y, 9, 31), i); if (x.getDay() === 6) add(x, "Alla helgons dag"); }
+  add(new Date(y, 11, 24), "Julafton");
+  add(new Date(y, 11, 25), "Juldagen");
+  add(new Date(y, 11, 26), "Annandag jul");
+  add(new Date(y, 11, 31), "Nyårsafton");
+  return H;
+}
+const HOL = new Map([...holidays(TODAY.getFullYear()), ...holidays(TODAY.getFullYear() + 1), ...holidays(TODAY.getFullYear() + 2)]);
+const isOff = d => d.getDay() === 0 || d.getDay() === 6 || HOL.has(iso(d));
+
+function bridgeSuggestions() {
+  const start = addDays(TODAY, 1), end = addDays(TODAY, 365), cands = [];
+  for (let s = new Date(start); s < end; s = addDays(s, 1)) {
+    if (isOff(addDays(s, -1))) continue;
+    for (let len = 4; len <= 18; len++) {
+      const e = addDays(s, len - 1);
+      if (isOff(addDays(e, 1))) continue;
+      let vac = 0, hol = [];
+      for (let i = 0; i < len; i++) {
+        const d = addDays(s, i);
+        if (!isOff(d)) vac++;
+        else if (HOL.has(iso(d)) && d.getDay() > 0 && d.getDay() < 6) hol.push(HOL.get(iso(d)));
+      }
+      if (!vac || !hol.length || vac > 8) continue;
+      cands.push({ from: iso(s), to: iso(e), len, vac, ratio: len / vac, hol: [...new Set(hol)] });
+    }
+  }
+  cands.sort((a, b) => b.ratio - a.ratio || b.len - a.len);
+  const picked = [];
+  for (const c of cands) {
+    if (picked.length >= 9) break;
+    if (c.len > 6 || picked.some(p => !(c.to < p.from || c.from > p.to))) continue;
+    picked.push(c);
+  }
+  // Längre variant per klämdag: bästa fönstret på minst 9 dagar som innehåller den.
+  for (const p of picked) p.long = cands.find(c => c.len >= 9 && c.from <= p.from && c.to >= p.to) || null;
+  return picked.sort((a, b) => a.from.localeCompare(b.from));
+}
+
+/* ---------- Tillstånd & lagring ---------- */
+const DEFAULT_INTERESTS = ["Löpning & lopp", "Fotboll", "Formel 1", "Konserter", "Festivaler", "Mat & vin", "Design & arkitektur", "Konst & museer", "Surf & strand", "Vandring", "Skidåkning", "Julmarknader"];
+const DEFAULT_PROFILE = {
+  home: "ARN", alt: "", adults: 1, children: 0, budget: 15000, stops: "1", time: "any", bag: "handbagage",
+  stay: "hotell", stars: "3", area: "centralt", loyalty: "", interests: ["Löpning & lopp", "Mat & vin", "Konserter"],
+  customInterests: [], pace: "lagom", diet: "", notes: "",
+};
+const state = { profile: { ...DEFAULT_PROFILE }, leaves: [], trips: [], plan: null, planInput: null, dayplan: null, profileSaved: false };
+const store = { mode: "local", db: null, uid: null };
+
+function allInterests() { return [...new Set([...DEFAULT_INTERESTS, ...(state.profile.customInterests || [])])]; }
+
+async function initStore() {
+  const local = safeLS.get("rk-data");
+  if (local) applyData(local);
+  renderAll();
+  if (!window.claude?.use) { renderStoreMode(); return; }
+  try {
+    const [db, user] = await Promise.all([claude.use("db"), claude.use("user")]);
+    const id = user ? await user.id() : null;
+    if (db && id) {
+      store.db = db; store.uid = id; store.mode = "db";
+      const snap = await profileRef().get();
+      if (snap.exists) applyData(snap.data());
+      const ts = await tripsRef().get();
+      state.trips = ts.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.savedAt || "").localeCompare(a.savedAt || ""));
+      renderAll();
+    }
+  } catch (e) { console.warn("db", e); }
+  renderStoreMode();
+}
+const profileRef = () => store.db.doc(`data/users/${store.uid}/profile`);
+const tripsRef = () => profileRef().collection("trips");
+function applyData(d) {
+  if (!d) return;
+  if (d.profile) { state.profile = { ...DEFAULT_PROFILE, ...d.profile }; state.profileSaved = true; }
+  if (Array.isArray(d.leaves)) state.leaves = d.leaves;
+  if (Array.isArray(d.trips) && store.mode === "local") state.trips = d.trips;
+}
+let writing = Promise.resolve();
+function persist() {
+  const data = { profile: state.profile, leaves: state.leaves };
+  safeLS.set("rk-data", { ...data, trips: store.mode === "local" ? state.trips : [] });
+  if (store.mode === "db") writing = writing.then(() => profileRef().set(data)).catch(e => { console.warn(e); toast("Kunde inte spara i kontot. Ändringen finns kvar i webbläsaren."); });
+  return writing;
+}
+async function saveTrip(trip) {
+  state.trips.unshift(trip);
+  if (store.mode === "db") { try { await tripsRef().doc(trip.id).set(trip); } catch (e) { toast(e?.code === "quota_exceeded" ? "Lagringen är full. Ta bort gamla resor först." : "Kunde inte spara resan."); } }
+  else persist();
+  renderSaved();
+}
+async function deleteTrip(id) {
+  state.trips = state.trips.filter(t => t.id !== id);
+  if (store.mode === "db") { try { await tripsRef().doc(id).delete(); } catch {} } else persist();
+  renderSaved();
+}
+function renderStoreMode() {
+  $("#storeMode").textContent = store.mode === "db" ? "Sparas i ditt Claude-konto, privat för dig" : "Sparas bara i den här webbläsaren";
+}
+
+/* ---------- Claude ---------- */
+let samplePromise = null;
+const getSample = () => (samplePromise ??= (window.claude?.use ? claude.use("sample").catch(() => null) : Promise.resolve(null)));
+const ERR = {
+  not_granted: "Claude har inte fått tillåtelse att användas här. Bokningslänkarna fungerar ändå.",
+  sampling_disabled: "Claude är inte tillgängligt för ditt konto.",
+  rate_limited: "För många förfrågningar just nu. Vänta en stund och försök igen.",
+  session_expired: "Du behöver logga in igen.",
+  refused: "Claude kunde inte svara på den här förfrågan. Prova att formulera om resmålet.",
+  invalid_json: "Svaret gick inte att läsa. Försök igen.",
+  empty_completion: "Claude gav inget svar. Försök igen.",
+  upstream_error: "Anslutningen bröts. Försök igen.",
+};
+const errText = e => ERR[e?.code] || ERR.upstream_error;
+
+function profileText() {
+  const p = state.profile;
+  return [
+    `Hemflygplats: ${p.home || "ARN"}${p.alt ? ` (alternativ: ${p.alt})` : ""}`,
+    `Resenärer: ${p.adults} vuxna, ${p.children} barn`,
+    `Budget per resa totalt: ${p.budget} SEK`,
+    `Byten: ${p.stops === "0" ? "bara direktflyg" : p.stops === "1" ? "max 1 byte" : "spelar ingen roll"}`,
+    `Föredragen avgångstid: ${p.time}`, `Bagage: ${p.bag}`,
+    `Boende: ${p.stay}, minst ${p.stars} stjärnor, läge: ${p.area}`,
+    p.loyalty && `Lojalitetsprogram: ${p.loyalty}`,
+    `Tempo: ${p.pace}`, p.diet && `Kost: ${p.diet}`, p.notes && `Övrigt: ${p.notes}`,
+  ].filter(Boolean).join("\n");
+}
+
+function busy(btn, stop, on) {
+  btn.disabled = on; stop.hidden = !on;
+}
+function statusEl(text) { return h("div", { class: "status" }, h("span", { class: "spinner", "aria-hidden": "true" }), h("span", null, text)); }
+function errorEl(text) { return h("div", { class: "status err" }, text); }
+
+/* ---------- Länkar ---------- */
+function linkSet({ origin, dest, iata, from, to, adults, children }) {
+  const city = dest;
+  const yymmdd = s => s.slice(2).replace(/-/g, "");
+  const pax = (adults || 1) + (children || 0);
+  const o = (origin || "ARN").toUpperCase();
+  const code = (iata || (/^[A-Za-z]{3}$/.test(dest) ? dest : "")).toUpperCase();
+  const month = parse(from).toLocaleDateString("sv-SE", { month: "long", year: "numeric" });
+  const flights = [
+    ext(`https://www.google.com/travel/flights?q=${encodeURIComponent(`Flights from ${o} to ${code || city} on ${from} through ${to}`)}&hl=sv&curr=SEK`, "Google Flights"),
+    code && ext(`https://www.skyscanner.se/transport/flights/${o.toLowerCase()}/${code.toLowerCase()}/${yymmdd(from)}/${yymmdd(to)}/?adultsv2=${adults || 1}&cabinclass=economy&rtn=1`, "Skyscanner"),
+    code && ext(`https://www.kayak.se/flights/${o}-${code}/${from}/${to}/${adults || 1}adults?sort=bestflight_a`, "Kayak"),
+    code && ext(`https://www.momondo.se/flight-search/${o}-${code}/${from}/${to}?sort=bestflight_a`, "Momondo"),
+  ];
+  const stays = [
+    ext(`https://www.booking.com/searchresults.sv.html?ss=${encodeURIComponent(city)}&checkin=${from}&checkout=${to}&group_adults=${adults || 1}&group_children=${children || 0}&no_rooms=1`, "Booking.com"),
+    ext(`https://www.airbnb.se/s/${encodeURIComponent(city)}/homes?checkin=${from}&checkout=${to}&adults=${adults || 1}&children=${children || 0}`, "Airbnb"),
+    ext(`https://www.google.com/travel/hotels/${encodeURIComponent(city)}?q=${encodeURIComponent(`hotell ${city}`)}&dates=${from},${to}&hl=sv`, "Google Hotels"),
+  ];
+  const events = [
+    ext(`https://www.google.com/search?q=${encodeURIComponent(`evenemang ${city} ${month}`)}`, "Evenemang i " + city),
+    ext(`https://www.google.com/search?q=${encodeURIComponent(`${city} events ${from} ${to}`)}`, "Events (engelska)"),
+    ext(`https://www.google.com/maps/search/${encodeURIComponent(city)}`, "Karta"),
+  ];
+  const groups = [["Flyg", flights], ["Boende", stays], ["På plats", events]];
+  return h("div", { class: "links" }, groups.map(([t, l]) => h("div", { class: "linkgroup" },
+    h("span", { class: "label" }, t), h("div", { class: "chips" }, l))));
+}
+
+/* ---------- Header-rutt ---------- */
+function renderFlap(origin, dest, from, to) {
+  const f = $("#flap"); f.replaceChildren();
+  const o = (origin || state.profile.home || "ARN").toUpperCase().slice(0, 3);
+  const d = (dest || "???").toUpperCase().slice(0, 3);
+  f.append(h("span", { class: "cell" }, o), h("span", { class: "arrow", "aria-hidden": "true" }, "→"), h("span", { class: "cell" }, d));
+  if (from && to) f.append(h("span", { class: "when" }, `${fmtDay(from)}\n– ${fmtDay(to)}`));
+}
+
+/* ---------- Intressechips ---------- */
+function renderInterestChips(container, selected, onChange) {
+  container.replaceChildren(...allInterests().map(name => {
+    const on = selected.includes(name);
+    return h("button", { type: "button", class: "chip", "aria-pressed": String(on), onclick: () => {
+      const i = selected.indexOf(name); i >= 0 ? selected.splice(i, 1) : selected.push(name);
+      onChange?.(); renderInterestChips(container, selected, onChange);
+    } }, name);
+  }));
+}
+
+/* ---------- PLANERA ---------- */
+let planInterests = [];
+let planCtl = null;
+function readPlanInput() {
+  return {
+    dest: $("#pDest").value.trim(), from: $("#pFrom").value, to: $("#pTo").value, flex: Number($("#pFlex").value),
+    interests: [...planInterests],
+  };
+}
+function updatePlanLinks() {
+  const i = readPlanInput();
+  const ok = i.dest && validIso(i.from) && validIso(i.to) && i.to > i.from;
+  $("#planMeta").textContent = ok ? `${daysBetween(i.from, i.to)} nätter` : "";
+  const box = $("#planLinks"); box.replaceChildren();
+  if (!ok) return;
+  const iata = state.plan && state.planInput?.dest === i.dest ? state.plan.destinationIata : "";
+  box.append(h("div", { class: "sechead" }, h("h3", null, "Sök och boka direkt"), h("span", { class: "small muted" }, "Förifyllda länkar, du betalar hos bolaget")),
+    linkSet({ origin: state.profile.home, dest: i.dest, iata, from: i.from, to: i.to, adults: state.profile.adults, children: state.profile.children }));
+  renderFlap(state.profile.home, iata || (/^[A-Za-z]{3}$/.test(i.dest) ? i.dest : i.dest.slice(0, 3)), i.from, i.to);
+}
+
+function planPrompt(i) {
+  return `Du är en erfaren reseplanerare för en resenär i Sverige. Dagens datum är ${iso(TODAY)}.
+Resmål: ${i.dest}
+Utresa: ${i.from}, hemresa: ${i.to} (${daysBetween(i.from, i.to)} nätter). Flexibilitet: ±${i.flex} dagar.
+Intressen: ${i.interests.join(", ") || "inga angivna"}
+Resenärens profil:
+${profileText()}
+
+Ta fram ett konkret underlag. Du kan inte söka på nätet, så priser är uppskattningar i SEK utifrån typisk prisnivå för rutten och säsongen. Evenemang: ta bara med sådant du har goda skäl att tro sker under perioden (återkommande årliga evenemang, säsonger, kända turnéer eller ligamatcher) och ange säkerhet ärligt. Hitta aldrig på specifika evenemang.
+
+Svara ENDAST med JSON i exakt denna form (svenska texter):
+{
+ "destinationIata": "BCN",
+ "city": "Barcelona",
+ "country": "Spanien",
+ "summary": "2-3 meningar om resan och perioden",
+ "weather": "typiskt väder under perioden, temperaturer",
+ "flights": [{"label":"Bäst totalt|Billigast|Snabbast|Bäst tider","airlines":"t.ex. SAS, Norwegian","route":"ARN–BCN direkt","stops":0,"durationH":4.0,"outTime":"rekommenderad avgångstid ut","homeTime":"rekommenderad avgångstid hem","priceSEK":[1800,2600],"why":"kort motivering kopplad till profilen"}],
+ "stays": [{"area":"stadsdel","why":"varför den passar profilen och intressena","type":"hotell/lägenhet","examples":["exempel på boende som brukar finnas där"],"perNightSEK":[900,1400]}],
+ "events": [{"name":"namn","startDate":"YYYY-MM-DD","endDate":"YYYY-MM-DD","place":"plats","interest":"vilket av intressena","why":"varför det passar","certainty":"säker|trolig|osäker"}],
+ "flex": [{"from":"YYYY-MM-DD","to":"YYYY-MM-DD","saveSEK":1200,"why":"t.ex. billigare veckodagar, missar ändå inget evenemang"}],
+ "estimateTotalSEK":[9000,14000],
+ "tips": ["3-5 praktiska tips: transfer från flygplats, lokala kort, bokningstiming, säkerhet"]
+}
+Ge 3 flygalternativ, 3 boendeområden, upp till 6 evenemang och 0-3 datumalternativ inom flexibiliteten (bara om de verkligen bör vara billigare eller bättre).`;
+}
+
+async function runPlan(ev) {
+  ev?.preventDefault();
+  const i = readPlanInput();
+  if (!(i.dest && validIso(i.from) && validIso(i.to) && i.to > i.from)) { toast("Ange resmål och en hemresa efter utresan."); return; }
+  const out = $("#planOut");
+  const sample = await getSample();
+  if (!sample) { out.replaceChildren(errorEl("Claude är inte tillgängligt i den här vyn. Använd bokningslänkarna ovan.")); return; }
+  planCtl?.abort(); planCtl = new AbortController();
+  busy($("#planBtn"), $("#planStop"), true);
+  out.replaceChildren(statusEl(`Claude letar flyg, boende och evenemang i ${i.dest}. Det tar oftast 20–60 sekunder.`));
+  try {
+    const plan = await sample.json(planPrompt(i), { signal: planCtl.signal });
+    if (!plan || typeof plan !== "object" || !Array.isArray(plan.flights)) throw { code: "invalid_json" };
+    state.plan = plan; state.planInput = i; state.dayplan = null;
+    renderPlan(plan, i, out);
+    updatePlanLinks();
+  } catch (e) {
+    if (e?.code === "cancelled") out.replaceChildren();
+    else out.replaceChildren(errorEl(errText(e)));
+  } finally { busy($("#planBtn"), $("#planStop"), false); }
+}
+
+function certaintyTag(c) {
+  const v = String(c || "").toLowerCase();
+  if (v.startsWith("säk")) return h("span", { class: "tag sure" }, "Bekräftat mönster");
+  if (v.startsWith("tro")) return h("span", { class: "tag likely" }, "Troligt");
+  return h("span", { class: "tag unsure" }, "Osäkert, kolla");
+}
+function dateBox(s) {
+  if (!validIso(s)) return h("div", { class: "datebox" }, h("div", { class: "d" }, "?"));
+  const d = parse(s);
+  return h("div", { class: "datebox" }, h("div", { class: "d" }, d.getDate()), h("div", { class: "m" }, d.toLocaleDateString("sv-SE", { month: "short" }).replace(".", "")));
+}
+
+function renderPlan(plan, i, out, opts = {}) {
+  const city = plan.city || i.dest;
+  const nodes = [];
+  nodes.push(h("div", { class: "sechead" },
+    h("h2", null, `${city}${plan.country ? ", " + plan.country : ""}`),
+    plan.estimateTotalSEK && h("span", { class: "price" }, "Uppskattat totalt " + krRange(plan.estimateTotalSEK))));
+  if (plan.summary) nodes.push(h("p", { style: "max-width:70ch" }, plan.summary));
+  if (plan.weather) nodes.push(h("p", { class: "muted small" }, "Väder: " + plan.weather));
+  nodes.push(h("div", { class: "note" }, "Priser och evenemang är Claudes uppskattningar utifrån kunskap, inte livesökningar. Kontrollera alltid via länkarna innan du bokar."));
+
+  // Flyg
+  nodes.push(h("h3", null, "Flyg"));
+  nodes.push(h("div", { style: "display:grid;gap:10px" }, (plan.flights || []).map(f => h("div", { class: "strip" },
+    h("div", { class: "stub" }, h("span", { class: "label" }, f.label || "Alternativ"), h("span", { class: "big mono" }, f.route ? String(f.route).split(" ")[0] : "")),
+    h("div", { class: "body" },
+      h("div", { class: "top" }, h("strong", null, f.airlines || ""), h("span", { class: "price" }, krRange(f.priceSEK) + " / person")),
+      h("div", { class: "small muted" }, [f.route, f.durationH && `${f.durationH} h`, f.stops === 0 ? "direkt" : f.stops != null ? `${f.stops} byte` : ""].filter(Boolean).join(" · ")),
+      (f.outTime || f.homeTime) && h("div", { class: "small" }, `Ut: ${f.outTime || "–"} · Hem: ${f.homeTime || "–"}`),
+      f.why && h("div", { class: "small" }, f.why))))));
+
+  // Datumtips
+  const flex = (plan.flex || []).filter(x => validIso(x.from) && validIso(x.to));
+  if (flex.length) {
+    nodes.push(h("h3", null, "Smartare datum"));
+    nodes.push(h("div", { class: "grid2" }, flex.map(x => h("div", { class: "card" },
+      h("div", { class: "top", style: "display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap" }, h("strong", null, fmtRange(x.from, x.to)), x.saveSEK ? h("span", { class: "price", style: "color:var(--good)" }, "Spara ca " + kr(x.saveSEK)) : null),
+      h("p", { class: "small" }, x.why || ""),
+      !opts.readonly && h("div", { class: "actions" }, h("button", { class: "btn sm", type: "button", onclick: () => { $("#pFrom").value = x.from; $("#pTo").value = x.to; updatePlanLinks(); toast("Datumen är uppdaterade"); } }, "Använd datumen"))))));
+  }
+
+  // Boende
+  nodes.push(h("h3", null, "Boende"));
+  nodes.push(h("div", { class: "grid2" }, (plan.stays || []).map(s => h("div", { class: "card" },
+    h("div", { style: "display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap" }, h("strong", null, s.area || ""), h("span", { class: "price" }, krRange(s.perNightSEK) + "/natt")),
+    s.type && h("span", { class: "label" }, s.type),
+    h("p", { class: "small" }, s.why || ""),
+    Array.isArray(s.examples) && s.examples.length ? h("p", { class: "small muted" }, "T.ex. " + s.examples.join(", ")) : null,
+    ext(`https://www.booking.com/searchresults.sv.html?ss=${encodeURIComponent(`${s.area}, ${city}`)}&checkin=${i.from}&checkout=${i.to}&group_adults=${state.profile.adults}&group_children=${state.profile.children}&no_rooms=1`, "Sök i området", "small")))));
+
+  // Evenemang
+  nodes.push(h("h3", null, "Händer när du är där"));
+  const evs = plan.events || [];
+  nodes.push(evs.length ? h("div", { class: "list" }, evs.map(e => h("div", { class: "event" }, dateBox(e.startDate),
+    h("div", { style: "display:grid;gap:4px;min-width:0" },
+      h("div", { style: "display:flex;gap:8px;flex-wrap:wrap;align-items:baseline" }, h("strong", null, e.name || ""), certaintyTag(e.certainty)),
+      h("div", { class: "small muted" }, [validIso(e.startDate) && (e.endDate && e.endDate !== e.startDate ? fmtRange(e.startDate, e.endDate) : fmtDay(e.startDate)), e.place, e.interest].filter(Boolean).join(" · ")),
+      e.why && h("div", { class: "small" }, e.why),
+      ext(`https://www.google.com/search?q=${encodeURIComponent(`${e.name} ${city} ${(e.startDate || "").slice(0, 4)}`)}`, "Kolla datum och biljetter", "small")))))
+    : h("div", { class: "empty" }, "Claude hittade inga evenemang som matchar dina intressen under perioden. Prova evenemangssökningen eller fler intressen."));
+
+  if (Array.isArray(plan.tips) && plan.tips.length) {
+    nodes.push(h("h3", null, "Bra att veta"));
+    nodes.push(h("ul", { style: "margin:0;padding-left:20px;display:grid;gap:4px;max-width:75ch" }, plan.tips.map(t => h("li", null, t))));
+  }
+
+  // Åtgärder
+  const dayOut = h("div", { id: opts.readonly ? null : "dayOut" });
+  if (!opts.readonly) {
+    nodes.push(h("div", { class: "actions" },
+      h("button", { class: "btn primary", type: "button", id: "dayBtn", onclick: () => runDayplan(dayOut) }, "Gör dagsplan"),
+      h("button", { class: "btn", type: "button", onclick: async (e) => {
+        e.currentTarget.disabled = true;
+        await saveTrip({ id: uid(), savedAt: new Date().toISOString(), input: i, plan, dayplan: state.dayplan });
+        toast("Resan är sparad");
+      } }, "Spara resa"),
+      ext(gcalLink(`Resa till ${city}`, i.from, i.to, plan.summary || ""), "Lägg resan i Google Kalender", "btn")));
+  }
+  nodes.push(dayOut);
+  if (opts.dayplan) renderDayplan(opts.dayplan, i, city, dayOut, true);
+  out.replaceChildren(...nodes);
+}
+
+/* ---------- Dagsplan ---------- */
+let dayCtl = null;
+async function runDayplan(out) {
+  const plan = state.plan, i = state.planInput;
+  if (!plan || !i) return;
+  const sample = await getSample(); if (!sample) return;
+  dayCtl?.abort(); dayCtl = new AbortController();
+  const btn = $("#dayBtn"); if (btn) btn.disabled = true;
+  out.replaceChildren(statusEl("Claude bygger en dagsplan utifrån boende, evenemang och restider…"));
+  const prompt = `Gör en flexibel dagsplan för en resa till ${plan.city || i.dest} ${i.from} till ${i.to}. Dagens datum: ${iso(TODAY)}.
+Profil:
+${profileText()}
+Intressen: ${i.interests.join(", ")}
+Rekommenderat boendeområde: ${(plan.stays || [])[0]?.area || "centralt"}
+Evenemang under resan: ${JSON.stringify((plan.events || []).map(e => ({ name: e.name, startDate: e.startDate, endDate: e.endDate, place: e.place })))}
+Flyg: ut ${(plan.flights || [])[0]?.outTime || "okänd tid"}, hem ${(plan.flights || [])[0]?.homeTime || "okänd tid"}.
+
+Väg in restid från boendet, tempot "${state.profile.pace}", måltider (gärna konkreta restaurangtyper/kvarter, inte påhittade namn om du är osäker) och lägg evenemangen på rätt dagar. Första och sista dagen ska ta hänsyn till flygtiderna.
+Svara ENDAST med JSON: {"days":[{"date":"YYYY-MM-DD","title":"kort tema för dagen","items":[{"time":"09:00","durationMin":90,"title":"aktivitet","place":"plats/område","note":"kort tips"}]}]}`;
+  try {
+    const r = await sample.json(prompt, { signal: dayCtl.signal });
+    if (!r || !Array.isArray(r.days)) throw { code: "invalid_json" };
+    state.dayplan = r;
+    renderDayplan(r, i, plan.city || i.dest, out, false);
+  } catch (e) {
+    out.replaceChildren(e?.code === "cancelled" ? "" : errorEl(errText(e)));
+  } finally { if (btn) btn.disabled = false; }
+}
+
+function renderDayplan(dp, i, city, out, readonly) {
+  const days = (dp.days || []).filter(d => validIso(d.date));
+  out.replaceChildren(
+    h("div", { class: "sechead", style: "margin-top:8px" }, h("h3", null, "Dagsplan"),
+      h("div", { class: "actions" }, h("button", { class: "btn sm", type: "button", onclick: () => exportIcs(dp, i, city, out) }, "Exportera till kalender (.ics)"))),
+    h("div", { class: "list" }, days.map(d => h("div", { class: "day" },
+      h("div", { style: "display:flex;gap:10px;align-items:baseline;flex-wrap:wrap" }, h("strong", null, fmtDay(d.date)), h("span", { class: "muted small" }, d.title || "")),
+      (d.items || []).map(it => h("div", { class: "item" }, h("span", { class: "t" }, it.time || ""),
+        h("div", { style: "min-width:0" }, h("div", null, it.title || ""), h("div", { class: "small muted" }, [it.place, it.note].filter(Boolean).join(" · ")))))))));
+}
+
+/* ---------- Kalender ---------- */
+const icsEsc = s => String(s || "").replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/([,;])/g, "\\$1");
+const compact = s => s.replace(/-/g, "");
+function buildIcs(dp, i, city) {
+  const L = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Resekompassen//SV", "CALSCALE:GREGORIAN"];
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
+  L.push("BEGIN:VEVENT", `UID:${uid()}@resekompassen`, `DTSTAMP:${stamp}`, `DTSTART;VALUE=DATE:${compact(i.from)}`, `DTEND;VALUE=DATE:${compact(iso(addDays(parse(i.to), 1)))}`, `SUMMARY:${icsEsc("Resa till " + city)}`, "END:VEVENT");
+  for (const d of dp?.days || []) for (const it of d.items || []) {
+    if (!validIso(d.date)) continue;
+    const m = /^(\d{1,2})[:.](\d{2})/.exec(it.time || "");
+    L.push("BEGIN:VEVENT", `UID:${uid()}@resekompassen`, `DTSTAMP:${stamp}`);
+    if (m) {
+      const st = new Date(parse(d.date)); st.setHours(+m[1], +m[2]);
+      const en = new Date(st.getTime() + (Number(it.durationMin) || 60) * 60000);
+      const f = x => `${iso(x).replace(/-/g, "")}T${pad(x.getHours())}${pad(x.getMinutes())}00`;
+      L.push(`DTSTART:${f(st)}`, `DTEND:${f(en)}`);
+    } else L.push(`DTSTART;VALUE=DATE:${compact(d.date)}`);
+    L.push(`SUMMARY:${icsEsc(it.title)}`, `LOCATION:${icsEsc(it.place)}`, `DESCRIPTION:${icsEsc(it.note)}`, "END:VEVENT");
+  }
+  L.push("END:VCALENDAR");
+  return L.join("\r\n");
+}
+async function exportIcs(dp, i, city, out) {
+  const text = buildIcs(dp, i, city);
+  const name = `resa-${(city || "resmal").toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${i.from}.ics`;
+  try {
+    const dl = window.claude?.use ? await claude.use("downloads") : null;
+    if (!dl) throw { code: "unavailable" };
+    await dl.save({ filename: name, data: new Blob([text], { type: "text/calendar" }) });
+    toast("Kalenderfilen är sparad");
+  } catch (e) {
+    if (e?.code === "declined") return;
+    const pre = h("pre", { class: "ics" }, text);
+    const box = h("div", { class: "card" }, h("strong", null, "Kopiera kalenderdata"),
+      h("p", { class: "small muted" }, "Filen kunde inte sparas härifrån. Kopiera texten, spara den som en .ics-fil och öppna den i din kalender."),
+      h("div", { class: "actions" }, h("button", { class: "btn sm", type: "button", onclick: async () => {
+        try { await navigator.clipboard.writeText(text); toast("Kopierat"); }
+        catch { const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+      } }, "Kopiera")), pre);
+    out.append(box);
+  }
+}
+function gcalLink(title, from, to, details) {
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${compact(from)}/${compact(iso(addDays(parse(to), 1)))}&details=${encodeURIComponent(String(details).slice(0, 800))}`;
+}
+
+/* ---------- UPPTÄCK ---------- */
+let discInterests = [];
+let discCtl = null;
+function periodOptions() {
+  const sel = $("#dPeriod"); const prev = sel.value; sel.replaceChildren();
+  const add = (val, text) => sel.append(h("option", { value: val }, text));
+  add("custom", "Egna datum");
+  add(`${iso(addDays(TODAY, 14))}|${iso(addDays(TODAY, 120))}`, "Kommande fyra månaderna");
+  add(`${iso(addDays(TODAY, 14))}|${iso(addDays(TODAY, 365))}`, "Kommande året");
+  for (const l of state.leaves) add(`${l.from}|${l.to}`, `Ledighet: ${l.label || "namnlös"} (${fmtRange(l.from, l.to)})`);
+  for (const b of bridgeSuggestions().slice(0, 6)) add(`${b.from}|${b.to}`, `Klämdag: ${b.hol[0]} (${fmtRange(b.from, b.to)})`);
+  sel.value = [...sel.options].some(o => o.value === prev) ? prev : sel.options[1].value;
+  applyPeriod();
+}
+function applyPeriod() {
+  const v = $("#dPeriod").value; if (v === "custom") return;
+  const [a, b] = v.split("|"); $("#dFrom").value = a; $("#dTo").value = b;
+}
+async function runDiscover(ev) {
+  ev?.preventDefault();
+  const from = $("#dFrom").value, to = $("#dTo").value, hours = $("#dHours").value;
+  if (!(validIso(from) && validIso(to) && to >= from)) { toast("Välj en period."); return; }
+  if (!discInterests.length) { toast("Välj minst ett intresse."); return; }
+  const out = $("#discOut");
+  const sample = await getSample();
+  if (!sample) { out.replaceChildren(errorEl("Claude är inte tillgängligt i den här vyn.")); return; }
+  discCtl?.abort(); discCtl = new AbortController();
+  busy($("#discBtn"), $("#discStop"), true);
+  out.replaceChildren(statusEl("Claude går igenom evenemang som matchar dina intressen…"));
+  const span = daysBetween(from, to);
+  const prompt = `Du hjälper en resenär i Sverige att hitta resor utifrån evenemang. Dagens datum: ${iso(TODAY)}.
+Period: ${from} till ${to}${span <= 21 ? " (en specifik ledighet, resan ska rymmas inom den)" : ""}.
+Intressen: ${discInterests.join(", ")}
+Max flygtid enkel väg från ${state.profile.home || "ARN"}: ${hours} timmar.
+Profil:
+${profileText()}
+
+Föreslå 6-10 evenemang eller säsongsupplevelser som infaller under perioden och matchar intressena: t.ex. stora lopp och maratonlopp, Formel 1-lopp, festivaler, derbyn och stora matcher, vinskörd, julmarknader, designveckor, surfsäsong. Ta bara med sådant du har goda skäl att tro sker (återkommande evenemang med känt mönster eller redan offentliggjorda datum). Ange ärligt säkerheten. Hitta aldrig på evenemang.
+Föreslå bästa ut- och hemresedatum (inom perioden) som täcker evenemanget utan onödiga nätter, och vilken veckodag som brukar vara billigast.
+Svara ENDAST med en JSON-array:
+[{"event":"namn","city":"stad","country":"land","iata":"BCN","startDate":"YYYY-MM-DD","endDate":"YYYY-MM-DD","interest":"vilket intresse","why":"1-2 meningar varför det passar","departDate":"YYYY-MM-DD","returnDate":"YYYY-MM-DD","flightHours":3.5,"estTotalSEK":[6000,9000],"certainty":"säker|trolig|osäker","bookBy":"när man bör boka, t.ex. 'biljetter släpps i januari'"}]`;
+  try {
+    const list = await sample.json(prompt, { signal: discCtl.signal });
+    if (!Array.isArray(list)) throw { code: "invalid_json" };
+    renderDiscover(list, out);
+  } catch (e) {
+    out.replaceChildren(e?.code === "cancelled" ? "" : errorEl(errText(e)));
+  } finally { busy($("#discBtn"), $("#discStop"), false); }
+}
+function renderDiscover(list, out) {
+  const items = list.filter(x => x && x.event).sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
+  if (!items.length) { out.replaceChildren(h("div", { class: "empty" }, "Inga träffar under perioden. Prova en längre period, längre flygtid eller fler intressen.")); return; }
+  out.replaceChildren(
+    h("div", { class: "note" }, "Evenemangen kommer från Claudes kunskap och kan ha ändrats. Kontrollera datum och biljetter innan du bokar."),
+    h("div", { class: "list" }, items.map(x => h("div", { class: "event" }, dateBox(x.startDate),
+      h("div", { style: "display:grid;gap:4px;min-width:0" },
+        h("div", { style: "display:flex;gap:8px;flex-wrap:wrap;align-items:baseline" }, h("strong", null, x.event), certaintyTag(x.certainty)),
+        h("div", { class: "small muted" }, [x.city && `${x.city}${x.country ? ", " + x.country : ""}`, validIso(x.startDate) && (x.endDate && x.endDate !== x.startDate ? fmtRange(x.startDate, x.endDate) : fmtDay(x.startDate)), x.interest].filter(Boolean).join(" · ")),
+        x.why && h("div", { class: "small" }, x.why),
+        h("div", { class: "small" }, [
+          validIso(x.departDate) && validIso(x.returnDate) && `Åk ${fmtRange(x.departDate, x.returnDate)}`,
+          x.flightHours && `ca ${x.flightHours} h flyg`, x.estTotalSEK && `totalt ${krRange(x.estTotalSEK)}`].filter(Boolean).join(" · ")),
+        x.bookBy && h("div", { class: "small muted" }, "Boka: " + x.bookBy),
+        h("div", { class: "actions", style: "margin-top:4px" },
+          h("button", { class: "btn sm primary", type: "button", onclick: () => {
+            $("#pDest").value = x.city || x.iata || "";
+            if (validIso(x.departDate)) $("#pFrom").value = x.departDate;
+            if (validIso(x.returnDate)) $("#pTo").value = x.returnDate;
+            if (x.interest && allInterests().includes(x.interest) && !planInterests.includes(x.interest)) planInterests.push(x.interest);
+            renderInterestChips($("#pInterests"), planInterests);
+            state.plan = null; state.planInput = null;
+            selectTab("plan"); updatePlanLinks(); $("#planOut").replaceChildren();
+            toast("Resan är ifylld. Tryck Hitta resa.");
+          } }, "Planera resa dit"),
+          ext(`https://www.google.com/search?q=${encodeURIComponent(`${x.event} ${(x.startDate || "").slice(0, 4)}`)}`, "Kolla datum", "btn sm")))))));
+}
+
+/* ---------- LEDIGHETER ---------- */
+function dayBar(from, to) {
+  const n = daysBetween(from, to) + 1, bar = h("div", { class: "bar", "aria-hidden": "true" });
+  for (let k = 0; k < n; k++) { const d = addDays(parse(from), k); bar.append(h("i", { class: HOL.has(iso(d)) ? "h" : isOff(d) ? "" : "w", title: fmtDay(iso(d)) })); }
+  return bar;
+}
+function renderBridges() {
+  const list = bridgeSuggestions();
+  $("#bridgeList").replaceChildren(...list.map(b => h("div", { class: "leave" },
+    h("div", { style: "min-width:0" },
+      h("strong", null, fmtRange(b.from, b.to)),
+      h("div", { class: "small muted" }, b.hol.join(", ")),
+      dayBar(b.from, b.to),
+      b.long && h("div", { class: "small", style: "margin-top:6px" }, `Längre: ta ${b.long.vac} dagar → ${b.long.len} dagar ledigt (${fmtRange(b.long.from, b.long.to)}) `,
+        h("button", { class: "btn sm ghost", type: "button", onclick: () => addLeave({ label: b.hol[0] + " (lång)", from: b.long.from, to: b.long.to }) }, "Spara"))),
+    h("div", { style: "display:grid;gap:6px;justify-items:end" },
+      h("span", { class: "ratio" }, `${b.vac} → ${b.len}`, h("small", null, " dagar")),
+      h("div", { class: "actions" },
+        h("button", { class: "btn sm", type: "button", onclick: () => { addLeave({ label: b.hol[0], from: b.from, to: b.to }); } }, "Spara"),
+        h("button", { class: "btn sm", type: "button", onclick: () => goDiscover(b.from, b.to) }, "Hitta evenemang"))))));
+}
+function addLeave(l) {
+  if (state.leaves.some(x => x.from === l.from && x.to === l.to)) { toast("Ledigheten finns redan"); return; }
+  state.leaves.push({ id: uid(), ...l }); state.leaves.sort((a, b) => a.from.localeCompare(b.from));
+  persist(); renderLeaves(); periodOptions(); toast("Ledigheten är sparad");
+}
+function goDiscover(from, to) {
+  selectTab("discover");
+  $("#dPeriod").value = [...$("#dPeriod").options].some(o => o.value === `${from}|${to}`) ? `${from}|${to}` : "custom";
+  $("#dFrom").value = from; $("#dTo").value = to;
+}
+function renderLeaves() {
+  const box = $("#leaveList");
+  const upcoming = state.leaves.filter(l => l.to >= iso(TODAY));
+  if (!upcoming.length) { box.replaceChildren(h("div", { class: "empty", style: "border:0" }, "Inga sparade ledigheter ännu. Lägg till dina semesterveckor ovan eller spara en klämdag, så kan du söka resor och evenemang direkt mot dem.")); return; }
+  box.replaceChildren(...upcoming.map(l => {
+    const vac = (() => { let v = 0; for (let k = 0; k <= daysBetween(l.from, l.to); k++) if (!isOff(addDays(parse(l.from), k))) v++; return v; })();
+    const confirmBox = h("span", { class: "confirm", hidden: true },
+      h("span", { class: "small" }, "Ta bort?"),
+      h("button", { class: "btn sm", type: "button", onclick: () => { state.leaves = state.leaves.filter(x => x.id !== l.id); persist(); renderLeaves(); periodOptions(); } }, "Ja"),
+      h("button", { class: "btn sm ghost", type: "button", onclick: () => { confirmBox.hidden = true; delBtn.hidden = false; } }, "Nej"));
+    const delBtn = h("button", { class: "btn sm ghost", type: "button", onclick: () => { confirmBox.hidden = false; delBtn.hidden = true; } }, "Ta bort");
+    return h("div", { class: "leave" },
+      h("div", { style: "min-width:0" }, h("strong", null, l.label || "Ledighet"), h("div", { class: "small muted" }, `${fmtRange(l.from, l.to)} · ${daysBetween(l.from, l.to) + 1} dagar, ${vac} semesterdagar`), dayBar(l.from, l.to)),
+      h("div", { class: "actions" },
+        h("button", { class: "btn sm", type: "button", onclick: () => goDiscover(l.from, l.to) }, "Hitta evenemang"),
+        delBtn, confirmBox));
+  }));
+}
+
+/* ---------- SPARADE ---------- */
+function renderSaved() {
+  const box = $("#savedList");
+  if (!state.trips.length) { box.replaceChildren(h("div", { class: "empty" }, h("strong", null, "Inga sparade resor"), "När du har tagit fram en resa under Planera resa kan du spara den här, med flyg, boende, evenemang och dagsplan.")); return; }
+  box.replaceChildren(...state.trips.map(t => {
+    const detail = h("div", { hidden: true, style: "display:grid;gap:14px;margin-top:10px" });
+    const confirmBox = h("span", { class: "confirm", hidden: true }, h("span", { class: "small" }, "Ta bort resan?"),
+      h("button", { class: "btn sm", type: "button", onclick: () => deleteTrip(t.id) }, "Ja"),
+      h("button", { class: "btn sm ghost", type: "button", onclick: () => { confirmBox.hidden = true; delBtn.hidden = false; } }, "Nej"));
+    const delBtn = h("button", { class: "btn sm ghost", type: "button", onclick: () => { confirmBox.hidden = false; delBtn.hidden = true; } }, "Ta bort");
+    return h("div", { class: "card" },
+      h("div", { style: "display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline" },
+        h("div", null, h("strong", { style: "font-family:var(--f-display);font-size:1.3rem" }, t.plan?.city || t.input?.dest), h("div", { class: "small muted" }, t.input ? fmtRange(t.input.from, t.input.to) : "")),
+        h("div", { class: "actions" },
+          h("button", { class: "btn sm", type: "button", onclick: () => {
+            if (detail.hidden) { renderPlan(t.plan, t.input, detail, { readonly: true, dayplan: t.dayplan }); detail.prepend(linkSet({ origin: state.profile.home, dest: t.plan?.city || t.input.dest, iata: t.plan?.destinationIata, from: t.input.from, to: t.input.to, adults: state.profile.adults, children: state.profile.children })); }
+            detail.hidden = !detail.hidden;
+          } }, "Visa"),
+          delBtn, confirmBox)),
+      detail);
+  }));
+}
+
+/* ---------- PROFIL ---------- */
+let profInterests = [];
+function fillProfileForm() {
+  const p = state.profile;
+  $("#fHome").value = p.home; $("#fAlt").value = p.alt; $("#fAdults").value = p.adults; $("#fChildren").value = p.children;
+  $("#fBudget").value = p.budget; $("#fStops").value = p.stops; $("#fTime").value = p.time; $("#fBag").value = p.bag;
+  $("#fStay").value = p.stay; $("#fStars").value = p.stars; $("#fArea").value = p.area; $("#fLoyalty").value = p.loyalty;
+  $("#fPace").value = p.pace; $("#fDiet").value = p.diet; $("#fNotes").value = p.notes;
+  profInterests = [...p.interests];
+  renderInterestChips($("#fInterests"), profInterests);
+  $("#profSaved").textContent = state.profileSaved ? "" : "Exempelvärden. Ändra och spara så används de i alla sökningar.";
+}
+function saveProfile(ev) {
+  ev.preventDefault();
+  state.profile = {
+    ...state.profile,
+    home: ($("#fHome").value.trim() || "ARN").toUpperCase(), alt: $("#fAlt").value.trim().toUpperCase(),
+    adults: Math.max(1, +$("#fAdults").value || 1), children: Math.max(0, +$("#fChildren").value || 0),
+    budget: Math.max(0, +$("#fBudget").value || 0), stops: $("#fStops").value, time: $("#fTime").value, bag: $("#fBag").value,
+    stay: $("#fStay").value, stars: $("#fStars").value, area: $("#fArea").value, loyalty: $("#fLoyalty").value.trim(),
+    interests: [...profInterests], pace: $("#fPace").value, diet: $("#fDiet").value.trim(), notes: $("#fNotes").value.trim(),
+  };
+  state.profileSaved = true;
+  persist().then(() => { $("#profSaved").textContent = "Sparat"; toast("Profilen är sparad"); });
+  planInterests = [...state.profile.interests]; discInterests = [...state.profile.interests];
+  renderInterestChips($("#pInterests"), planInterests); renderInterestChips($("#dInterests"), discInterests);
+  updatePlanLinks();
+}
+function addCustomInterest() {
+  const v = $("#fNewInterest").value.trim(); if (!v) return;
+  state.profile.customInterests = [...new Set([...(state.profile.customInterests || []), v])];
+  if (!profInterests.includes(v)) profInterests.push(v);
+  $("#fNewInterest").value = "";
+  renderInterestChips($("#fInterests"), profInterests);
+}
+
+/* ---------- Flikar ---------- */
+function selectTab(name) {
+  document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", String(t.dataset.tab === name)));
+  document.querySelectorAll("[data-panel]").forEach(p => (p.hidden = p.dataset.panel !== name));
+  safeLS.set("rk-tab", name);
+}
+
+/* ---------- Start ---------- */
+function defaultTripDates() {
+  // Första klämdagsfönstret som ligger minst två veckor bort, annars om sex veckor.
+  const b = bridgeSuggestions().find(x => daysBetween(iso(TODAY), x.from) >= 14);
+  if (b) return [b.from, b.to];
+  const f = addDays(TODAY, 42); return [iso(f), iso(addDays(f, 4))];
+}
+function renderAll() {
+  fillProfileForm();
+  planInterests = [...state.profile.interests]; discInterests = [...state.profile.interests];
+  renderInterestChips($("#pInterests"), planInterests);
+  renderInterestChips($("#dInterests"), discInterests);
+  renderBridges(); renderLeaves(); renderSaved(); periodOptions(); updatePlanLinks(); renderStoreMode();
+}
+
+document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => selectTab(t.dataset.tab)));
+$("#planForm").addEventListener("submit", runPlan);
+$("#planStop").addEventListener("click", () => planCtl?.abort());
+["#pDest", "#pFrom", "#pTo"].forEach(s => $(s).addEventListener("input", updatePlanLinks));
+$("#discForm").addEventListener("submit", runDiscover);
+$("#discStop").addEventListener("click", () => discCtl?.abort());
+$("#dPeriod").addEventListener("change", applyPeriod);
+["#dFrom", "#dTo"].forEach(s => $(s).addEventListener("input", () => ($("#dPeriod").value = "custom")));
+$("#leaveForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const from = $("#lFrom").value, to = $("#lTo").value;
+  if (!(validIso(from) && validIso(to) && to >= from)) { toast("Slutdatum måste vara efter startdatum."); return; }
+  addLeave({ label: $("#lLabel").value.trim(), from, to }); e.target.reset();
+});
+$("#profForm").addEventListener("submit", saveProfile);
+$("#fAddInterest").addEventListener("click", addCustomInterest);
+$("#fNewInterest").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addCustomInterest(); } });
+
+const [df, dt] = defaultTripDates();
+$("#pDest").value = "Barcelona"; $("#pFrom").value = df; $("#pTo").value = dt;
+selectTab(safeLS.get("rk-tab") || "plan");
+initStore();
+})();
+</script>
