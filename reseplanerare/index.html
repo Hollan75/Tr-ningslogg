@@ -1545,7 +1545,10 @@ function saveProfile(ev) {
     interests: [...profInterests], pace: $("#fPace").value, diet: $("#fDiet").value.trim(), notes: $("#fNotes").value.trim(),
   };
   state.profileSaved = true;
-  persist().then(() => { $("#profSaved").textContent = "Sparat"; toast("Profilen är sparad"); });
+  $("#profSaved").textContent = "Sparar…";
+  let done = false;
+  persist().then(() => { done = true; $("#profSaved").textContent = "Sparat"; toast("Profilen är sparad"); });
+  setTimeout(() => { if (!done) $("#profSaved").textContent = "Sparat i webbläsaren, väntar på kontot…"; }, 8000);
   renderKnowledge();
   planInterests = [...state.profile.interests]; discInterests = [...state.profile.interests];
   renderInterestChips($("#pInterests"), planInterests); renderInterestChips($("#dInterests"), discInterests);
@@ -1752,7 +1755,7 @@ function actionButton(b) {
   return null;
 }
 
-let chatCtl = null, chatPending = false;
+let chatCtl = null, chatPending = false, chatStalled = false;
 function renderChat() {
   const log = $("#chatLog"); if (!log) return;
   const greeting = h("div", { class: "msg bot" }, h("div", { class: "bubble" },
@@ -1768,7 +1771,7 @@ function renderChat() {
       m.trend ? chatTrendEl(m.trend) : null,
       (m.buttons || []).length ? h("div", { class: "actions" }, m.buttons.map(actionButton)) : null);
   });
-  const pending = chatPending ? h("div", { class: "msg bot" }, h("div", { class: "bubble" }, h("span", { class: "spinner", style: "display:inline-block;vertical-align:middle;margin-right:8px", "aria-hidden": "true" }), "Tänker…")) : null;
+  const pending = chatPending ? h("div", { class: "msg bot" }, h("div", { class: "bubble" }, h("span", { class: "spinner", style: "display:inline-block;vertical-align:middle;margin-right:8px", "aria-hidden": "true" }), chatStalled ? "Det tar längre tid än vanligt. Om en ruta om att tillåta Claude har dykt upp, godkänn den. Annars kan du trycka Avbryt och skicka igen." : "Tänker…")) : null;
   log.replaceChildren(greeting, ...items, pending || "");
   log.scrollTop = log.scrollHeight;
   $("#chatExamples").hidden = state.chat.length > 2;
@@ -1781,23 +1784,32 @@ function undo(i) {
   persist(); persistChat(); renderAll(); toast("Ändringarna är ångrade");
 }
 
+let chatStallTimer = null;
+// Skicka-knappen stängs aldrig av: ett tryck medan svaret väntar ska ge ett besked, inte ingenting.
+function chatBusy(on) { $("#chatStop").hidden = !on; $("#chatSend").setAttribute("aria-busy", String(on)); $("#chatSend").style.opacity = on ? ".6" : ""; }
 async function sendChat(ev) {
   ev?.preventDefault();
   const input = $("#chatInput"); const text = input.value.trim();
-  if (!text || chatPending) return;
-  const sample = await getSample();
+  if (chatPending) { toast("Jag väntar fortfarande på förra svaret. Tryck Avbryt om du vill skicka något nytt."); return; }
+  if (!text) { toast("Skriv eller diktera något först."); input.focus(); return; }
+  // Visa meddelandet direkt och spara det, innan något annat väntas in.
   state.chat.push({ role: "user", text });
   input.value = ""; autoGrow();
-  if (!sample) { state.chat.push({ role: "assistant", text: "Claude är inte tillgängligt i den här vyn, så jag kan inte tolka meddelandet. Du kan fylla i profilen under fliken Profil.", error: true }); renderChat(); return; }
-  chatPending = true; renderChat();
-  chatCtl = new AbortController(); busy($("#chatSend"), $("#chatStop"), true);
-  const history = state.chat.slice(-13, -1).filter(m => !m.error).map(m => ({
-    role: m.role === "user" ? "user" : "assistant",
-    content: m.role === "user" ? m.text : m.text + ((m.changes || []).length ? `\n[Sparat: ${m.changes.join("; ")}]` : ""),
-  }));
-  const turns = [{ role: "user", content: chatRules() }, ...history, { role: "user", content: text }];
+  chatPending = true; chatStalled = false;
+  const ctl = chatCtl = new AbortController();
+  chatBusy(true);
+  renderChat(); persistChat();
+  clearTimeout(chatStallTimer);
+  chatStallTimer = setTimeout(() => { if (chatPending && chatCtl === ctl) { chatStalled = true; renderChat(); } }, 45000);
   try {
-    const r = await sample.json(turns, { signal: chatCtl.signal, cache: false });
+    const sample = await Promise.race([getSample(), new Promise((_, rej) => ctl.signal.addEventListener("abort", () => rej({ code: "cancelled" }), { once: true }))]);
+    if (!sample) { state.chat.push({ role: "assistant", text: "Claude är inte tillgängligt i den här vyn, så jag kan inte tolka meddelandet. Öppna sidan i Claude-appen eller på claude.ai och försök igen. Du kan också fylla i profilen under fliken Profil.", error: true }); return; }
+    const history = state.chat.slice(-13, -1).filter(m => !m.error).map(m => ({
+      role: m.role === "user" ? "user" : "assistant",
+      content: m.role === "user" ? m.text : m.text + ((m.changes || []).length ? `\n[Sparat: ${m.changes.join("; ")}]` : ""),
+    }));
+    const turns = [{ role: "user", content: chatRules() }, ...history, { role: "user", content: text }];
+    const r = await sample.json(turns, { signal: ctl.signal, cache: false });
     if (!r || typeof r !== "object") throw { code: "invalid_json" };
     const snapshot = JSON.stringify({ profile: state.profile, leaves: state.leaves, wishes: state.wishes });
     const { changes, buttons, prices } = applyActions(r.actions);
@@ -1809,9 +1821,11 @@ async function sendChat(ev) {
     if (fq) chatPrices(msg, fq);
     if (tq) chatTrend(msg, tq);
   } catch (e) {
-    if (e?.code !== "cancelled") state.chat.push({ role: "assistant", text: errText(e), error: true });
+    if (e?.code === "cancelled") state.chat.push({ role: "assistant", text: "Avbrutet. Skriv igen när du vill.", error: true });
+    else { console.warn("chat", e); state.chat.push({ role: "assistant", text: errText(e), error: true }); }
   } finally {
-    chatPending = false; busy($("#chatSend"), $("#chatStop"), false);
+    clearTimeout(chatStallTimer);
+    if (chatCtl === ctl) { chatPending = false; chatStalled = false; chatBusy(false); }
     persistChat(); renderChat();
   }
 }
