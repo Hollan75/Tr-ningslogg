@@ -88,6 +88,18 @@ async function setupSchema(db: SQLite.SQLiteDatabase): Promise<void> {
     );
   `);
 
+  // Migration: session name (kept even if the template is deleted later)
+  try {
+    await db.execAsync('ALTER TABLE workout_sessions ADD COLUMN name TEXT');
+    await db.execAsync(`
+      UPDATE workout_sessions
+      SET name = (SELECT name FROM workout_templates WHERE id = workout_sessions.template_id)
+      WHERE template_id IS NOT NULL
+    `);
+  } catch {
+    // Column already exists
+  }
+
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS session_sets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,6 +121,22 @@ async function setupSchema(db: SQLite.SQLiteDatabase): Promise<void> {
       value TEXT
     );
   `);
+
+  await db.execAsync(`
+    CREATE INDEX IF NOT EXISTS idx_session_sets_exercise ON session_sets(exercise_id);
+    CREATE INDEX IF NOT EXISTS idx_session_sets_session ON session_sets(session_id);
+  `);
+
+  // Migration: older templates were saved with rest_seconds = 0 (no rest timer).
+  const restMigrated = await db.getFirstAsync<{ value: string }>(
+    "SELECT value FROM settings WHERE key = 'migration_rest_default'"
+  );
+  if (!restMigrated) {
+    await db.execAsync(`
+      UPDATE template_exercises SET rest_seconds = 90 WHERE rest_seconds = 0;
+      INSERT OR REPLACE INTO settings (key, value) VALUES ('migration_rest_default', 'done');
+    `);
+  }
 }
 
 // ─── SETTINGS ───────────────────────────────────────────────────────────────
@@ -170,7 +198,8 @@ export async function insertExercisesBatch(exercises: Exercise[]): Promise<void>
 export async function getExercises(
   search?: string,
   bodyPart?: string,
-  equipment?: string
+  equipment?: string,
+  customOnly = false
 ): Promise<Exercise[]> {
   const db = await getDb();
   const conditions: string[] = [];
@@ -188,11 +217,31 @@ export async function getExercises(
     conditions.push('equipment = ?');
     params.push(equipment);
   }
+  if (customOnly) {
+    conditions.push("id LIKE 'custom_%'");
+  }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   return db.getAllAsync<Exercise>(
     `SELECT * FROM exercises ${where} ORDER BY name ASC LIMIT 200`,
     params
+  );
+}
+
+// Exercises used most recently in workouts or templates, plus custom exercises
+export async function getRecentExercises(limit = 15): Promise<Exercise[]> {
+  const db = await getDb();
+  return db.getAllAsync<Exercise>(
+    `SELECT e.* FROM exercises e
+     LEFT JOIN (
+       SELECT exercise_id, MAX(completed_at) as last FROM session_sets GROUP BY exercise_id
+     ) u ON u.exercise_id = e.id
+     WHERE u.last IS NOT NULL
+        OR e.id LIKE 'custom_%'
+        OR e.id IN (SELECT exercise_id FROM template_exercises)
+     ORDER BY u.last IS NULL, u.last DESC, e.name
+     LIMIT ?`,
+    [limit]
   );
 }
 
@@ -246,13 +295,30 @@ export async function insertExercise(exercise: Exercise): Promise<void> {
   );
 }
 
+export async function isExerciseInUse(id: string): Promise<boolean> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ n: number }>(
+    `SELECT
+       (SELECT COUNT(*) FROM template_exercises WHERE exercise_id = ?) +
+       (SELECT COUNT(*) FROM session_sets WHERE exercise_id = ?) as n`,
+    [id, id]
+  );
+  return (row?.n ?? 0) > 0;
+}
+
+export async function deleteExercise(id: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM exercises WHERE id = ?', [id]);
+}
+
 export async function clearExercises(): Promise<void> {
   const db = await getDb();
-  // Only delete exercises that are not referenced by any template or session.
-  // Deleting referenced rows would violate FK constraints.
+  // Only delete built-in exercises that are not referenced by any template or session.
+  // Deleting referenced rows would violate FK constraints; custom exercises are always kept.
   await db.runAsync(`
     DELETE FROM exercises
-    WHERE id NOT IN (SELECT exercise_id FROM template_exercises)
+    WHERE id NOT LIKE 'custom_%'
+      AND id NOT IN (SELECT exercise_id FROM template_exercises)
       AND id NOT IN (SELECT exercise_id FROM session_sets)
   `);
 }
@@ -263,10 +329,67 @@ export async function getTemplates(): Promise<WorkoutTemplate[]> {
   const db = await getDb();
   return db.getAllAsync<WorkoutTemplate>(
     `SELECT wt.*,
-       (SELECT COUNT(*) FROM template_exercises WHERE template_id = wt.id) as exercise_count
+       (SELECT COUNT(*) FROM template_exercises WHERE template_id = wt.id) as exercise_count,
+       (SELECT GROUP_CONCAT(name, ', ') FROM (
+          SELECT e.name FROM template_exercises te
+          JOIN exercises e ON e.id = te.exercise_id
+          WHERE te.template_id = wt.id ORDER BY te.order_index
+        )) as exercise_names,
+       (SELECT MAX(started_at) FROM workout_sessions
+        WHERE template_id = wt.id AND completed_at IS NOT NULL) as last_used
      FROM workout_templates wt
      ORDER BY created_at DESC`
   );
+}
+
+export async function getTemplateById(id: number): Promise<WorkoutTemplate | null> {
+  const db = await getDb();
+  return db.getFirstAsync<WorkoutTemplate>('SELECT * FROM workout_templates WHERE id = ?', [id]);
+}
+
+export interface TemplateExerciseInput {
+  exerciseId: string;
+  sets: number;
+  reps: number;
+  weightKg: number;
+  restSeconds: number;
+}
+
+// Saves name and the full exercise list in one transaction. Returns the template id.
+export async function saveTemplate(
+  templateId: number | null,
+  name: string,
+  exercises: TemplateExerciseInput[]
+): Promise<number> {
+  const db = await getDb();
+  await db.execAsync('BEGIN');
+  try {
+    let id = templateId;
+    if (id) {
+      await db.runAsync('UPDATE workout_templates SET name = ? WHERE id = ?', [name, id]);
+      await db.runAsync('DELETE FROM template_exercises WHERE template_id = ?', [id]);
+    } else {
+      const result = await db.runAsync(
+        'INSERT INTO workout_templates (name, created_at) VALUES (?, ?)',
+        [name, new Date().toISOString()]
+      );
+      id = result.lastInsertRowId;
+    }
+    for (let i = 0; i < exercises.length; i++) {
+      const ex = exercises[i];
+      await db.runAsync(
+        `INSERT INTO template_exercises
+         (template_id, exercise_id, sets, reps_min, reps_max, rest_seconds, order_index, weight_kg)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, ex.exerciseId, ex.sets, ex.reps, ex.reps, ex.restSeconds, i, ex.weightKg]
+      );
+    }
+    await db.execAsync('COMMIT');
+    return id;
+  } catch (e) {
+    await db.execAsync('ROLLBACK');
+    throw e;
+  }
 }
 
 export async function createTemplate(name: string): Promise<number> {
@@ -285,7 +408,23 @@ export async function renameTemplate(id: number, name: string): Promise<void> {
 
 export async function deleteTemplate(id: number): Promise<void> {
   const db = await getDb();
-  await db.runAsync('DELETE FROM workout_templates WHERE id = ?', [id]);
+  // Sessions reference the template (FK without cascade). Keep the history by copying
+  // the name onto the sessions and detaching them before the template is removed.
+  await db.execAsync('BEGIN');
+  try {
+    await db.runAsync(
+      `UPDATE workout_sessions
+       SET name = COALESCE(name, (SELECT name FROM workout_templates WHERE id = ?)),
+           template_id = NULL
+       WHERE template_id = ?`,
+      [id, id]
+    );
+    await db.runAsync('DELETE FROM workout_templates WHERE id = ?', [id]);
+    await db.execAsync('COMMIT');
+  } catch (e) {
+    await db.execAsync('ROLLBACK');
+    throw e;
+  }
 }
 
 export async function getTemplateExercises(templateId: number): Promise<TemplateExercise[]> {
@@ -340,8 +479,9 @@ export async function updateTemplateExercise(
 export async function startSession(templateId?: number): Promise<number> {
   const db = await getDb();
   const result = await db.runAsync(
-    'INSERT INTO workout_sessions (template_id, started_at) VALUES (?, ?)',
-    [templateId ?? null, new Date().toISOString()]
+    `INSERT INTO workout_sessions (template_id, name, started_at)
+     VALUES (?, (SELECT name FROM workout_templates WHERE id = ?), ?)`,
+    [templateId ?? null, templateId ?? null, new Date().toISOString()]
   );
   return result.lastInsertRowId;
 }
@@ -359,11 +499,24 @@ export async function cancelSession(id: number): Promise<void> {
   await db.runAsync('DELETE FROM workout_sessions WHERE id = ?', [id]);
 }
 
+// The most recent session that was started but never completed (e.g. app was closed mid-workout)
+export async function getActiveSession(): Promise<WorkoutSession | null> {
+  const db = await getDb();
+  return db.getFirstAsync<WorkoutSession>(
+    `SELECT ws.*, COALESCE(wt.name, ws.name) as template_name,
+       (SELECT COUNT(*) FROM session_sets WHERE session_id = ws.id) as set_count
+     FROM workout_sessions ws
+     LEFT JOIN workout_templates wt ON ws.template_id = wt.id
+     WHERE ws.completed_at IS NULL
+     ORDER BY ws.started_at DESC LIMIT 1`
+  );
+}
+
 export async function getSessions(): Promise<WorkoutSession[]> {
   const db = await getDb();
   return db.getAllAsync<WorkoutSession>(
     `SELECT ws.*,
-       wt.name as template_name,
+       COALESCE(wt.name, ws.name) as template_name,
        (SELECT COUNT(DISTINCT exercise_id) FROM session_sets WHERE session_id = ws.id) as exercise_count,
        (SELECT COUNT(*) FROM session_sets WHERE session_id = ws.id) as set_count,
        (SELECT COALESCE(SUM(COALESCE(reps,0) * COALESCE(weight_kg,0)),0)
@@ -378,7 +531,7 @@ export async function getSessions(): Promise<WorkoutSession[]> {
 export async function getSessionById(id: number): Promise<WorkoutSession | null> {
   const db = await getDb();
   return db.getFirstAsync<WorkoutSession>(
-    `SELECT ws.*, wt.name as template_name
+    `SELECT ws.*, COALESCE(wt.name, ws.name) as template_name
      FROM workout_sessions ws
      LEFT JOIN workout_templates wt ON ws.template_id = wt.id
      WHERE ws.id = ?`,
@@ -414,6 +567,19 @@ export async function addSessionSet(
   return result.lastInsertRowId;
 }
 
+export async function updateSessionSet(
+  id: number,
+  setNumber: number,
+  reps: number | null,
+  weightKg: number | null
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    'UPDATE session_sets SET set_number = ?, reps = ?, weight_kg = ? WHERE id = ?',
+    [setNumber, reps, weightKg, id]
+  );
+}
+
 export async function removeSessionSet(id: number): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM session_sets WHERE id = ?', [id]);
@@ -426,7 +592,9 @@ export async function getSessionSets(sessionId: number): Promise<SessionSet[]> {
      FROM session_sets ss
      JOIN exercises e ON ss.exercise_id = e.id
      WHERE ss.session_id = ?
-     ORDER BY ss.exercise_id, ss.set_number`,
+     ORDER BY (SELECT MIN(x.id) FROM session_sets x
+               WHERE x.session_id = ss.session_id AND x.exercise_id = ss.exercise_id),
+              ss.set_number, ss.id`,
     [sessionId]
   );
 }
@@ -438,9 +606,10 @@ export async function getPreviousPerformance(
 ): Promise<SessionSet[]> {
   const db = await getDb();
   const row = await db.getFirstAsync<{ session_id: number }>(
-    `SELECT session_id FROM session_sets
-     WHERE exercise_id = ? AND session_id != ?
-     ORDER BY completed_at DESC LIMIT 1`,
+    `SELECT ss.session_id FROM session_sets ss
+     JOIN workout_sessions ws ON ws.id = ss.session_id
+     WHERE ss.exercise_id = ? AND ss.session_id != ? AND ws.completed_at IS NOT NULL
+     ORDER BY ws.started_at DESC LIMIT 1`,
     [exerciseId, excludeSessionId]
   );
   if (!row) return [];
@@ -452,6 +621,53 @@ export async function getPreviousPerformance(
      ORDER BY ss.set_number`,
     [row.session_id, exerciseId]
   );
+}
+
+export interface ExerciseHistoryEntry {
+  sessionId: number;
+  startedAt: string;
+  sessionName: string | null;
+  sets: SessionSet[];
+}
+
+// Completed sessions where the exercise was performed, newest first
+export async function getExerciseHistory(
+  exerciseId: string,
+  limit = 20
+): Promise<ExerciseHistoryEntry[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<
+    SessionSet & { started_at: string; template_name: string | null }
+  >(
+    `SELECT ss.*, ws.started_at, COALESCE(wt.name, ws.name) as template_name
+     FROM session_sets ss
+     JOIN workout_sessions ws ON ws.id = ss.session_id
+     LEFT JOIN workout_templates wt ON wt.id = ws.template_id
+     WHERE ss.exercise_id = ?
+       AND ss.session_id IN (
+         SELECT y.id FROM workout_sessions y
+         WHERE y.completed_at IS NOT NULL
+           AND EXISTS (SELECT 1 FROM session_sets x WHERE x.session_id = y.id AND x.exercise_id = ?)
+         ORDER BY y.started_at DESC LIMIT ?
+       )
+     ORDER BY ws.started_at DESC, ss.set_number`,
+    [exerciseId, exerciseId, limit]
+  );
+  const entries: ExerciseHistoryEntry[] = [];
+  for (const r of rows) {
+    let entry = entries[entries.length - 1];
+    if (!entry || entry.sessionId !== r.session_id) {
+      entry = {
+        sessionId: r.session_id,
+        startedAt: r.started_at,
+        sessionName: r.template_name,
+        sets: [],
+      };
+      entries.push(entry);
+    }
+    entry.sets.push(r);
+  }
+  return entries;
 }
 
 // ─── STATS ───────────────────────────────────────────────────────────────────
@@ -466,7 +682,11 @@ export async function getStats(): Promise<{
     db.getFirstAsync<{ count: number }>(
       'SELECT COUNT(*) as count FROM workout_sessions WHERE completed_at IS NOT NULL'
     ),
-    db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM session_sets'),
+    db.getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) as count FROM session_sets ss
+       JOIN workout_sessions ws ON ws.id = ss.session_id
+       WHERE ws.completed_at IS NOT NULL`
+    ),
     db.getFirstAsync<{ count: number }>(
       'SELECT COUNT(*) as count FROM workout_sessions WHERE completed_at IS NOT NULL AND started_at > ?',
       [new Date(Date.now() - 7 * 86400000).toISOString()]

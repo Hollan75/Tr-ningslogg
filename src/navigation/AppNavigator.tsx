@@ -22,6 +22,7 @@ export type RootStackParamList = {
   CreateTemplate: { templateId?: number };
   ActiveWorkout: { sessionId: number; sessionName: string };
   SessionDetail: { sessionId: number };
+  Settings: undefined;
 };
 
 // Bottom tabs
@@ -31,7 +32,6 @@ export type TabParamList = {
   WorkoutTab: undefined;
   HistoryTab: undefined;
   AICoachTab: undefined;
-  SettingsTab: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -50,7 +50,7 @@ function Tabs() {
         },
         tabBarActiveTintColor: COLORS.accent,
         tabBarInactiveTintColor: COLORS.textMuted,
-        tabBarLabelStyle: { fontSize: 11, marginBottom: 2 },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
       }}
     >
       <Tab.Screen
@@ -58,8 +58,8 @@ function Tabs() {
         component={HomeScreen}
         options={{
           tabBarLabel: 'Hem',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={size} color={color} />
           ),
         }}
       />
@@ -68,8 +68,8 @@ function Tabs() {
         component={ExercisesScreen}
         options={{
           tabBarLabel: 'Övningar',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="barbell-outline" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'barbell' : 'barbell-outline'} size={size} color={color} />
           ),
         }}
       />
@@ -77,9 +77,9 @@ function Tabs() {
         name="WorkoutTab"
         component={WorkoutScreen}
         options={{
-          tabBarLabel: 'Pass',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="flash-outline" size={size} color={color} />
+          tabBarLabel: 'Träna',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'flash' : 'flash-outline'} size={size} color={color} />
           ),
         }}
       />
@@ -88,8 +88,8 @@ function Tabs() {
         component={HistoryScreen}
         options={{
           tabBarLabel: 'Historik',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="time-outline" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'time' : 'time-outline'} size={size} color={color} />
           ),
         }}
       />
@@ -98,18 +98,8 @@ function Tabs() {
         component={AICoachScreen}
         options={{
           tabBarLabel: 'AI Coach',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="sparkles-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="SettingsTab"
-        component={SettingsScreen}
-        options={{
-          tabBarLabel: 'Inställningar',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'sparkles' : 'sparkles-outline'} size={size} color={color} />
           ),
         }}
       />
@@ -134,6 +124,7 @@ export default function AppNavigator() {
         options={{ presentation: 'fullScreenModal' }}
       />
       <Stack.Screen name="SessionDetail" component={SessionDetailScreen} />
+      <Stack.Screen name="Settings" component={SettingsScreen} />
     </Stack.Navigator>
   );
 }

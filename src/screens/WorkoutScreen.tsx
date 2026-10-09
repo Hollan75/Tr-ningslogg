@@ -13,8 +13,11 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { COLORS, RADIUS } from '../theme';
-import { getTemplates, deleteTemplate, startSession } from '../database';
-import type { WorkoutTemplate } from '../types';
+import { getTemplates, deleteTemplate, getActiveSession } from '../database';
+import ResumeBanner from '../components/ResumeBanner';
+import { startWorkout } from '../utils/workout';
+import { fmtRelativeDate } from '../utils/format';
+import type { WorkoutTemplate, WorkoutSession } from '../types';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -22,111 +25,122 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 export default function WorkoutScreen() {
   const navigation = useNavigation<Nav>();
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
+  const [active, setActive] = useState<WorkoutSession | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       getTemplates().then(setTemplates);
+      getActiveSession().then(setActive);
     }, [])
   );
 
-  async function handleFreeWorkout() {
-    const sessionId = await startSession();
-    navigation.navigate('ActiveWorkout', { sessionId, sessionName: 'Fritt pass' });
-  }
-
-  async function handleStartTemplate(template: WorkoutTemplate) {
-    const sessionId = await startSession(template.id);
-    navigation.navigate('ActiveWorkout', { sessionId, sessionName: template.name });
-  }
-
-  function handleDeleteTemplate(template: WorkoutTemplate) {
-    Alert.alert(
-      'Ta bort mall',
-      `Vill du ta bort mallen "${template.name}"?`,
-      [
-        { text: 'Avbryt', style: 'cancel' },
-        {
-          text: 'Ta bort',
-          style: 'destructive',
-          onPress: async () => {
-            await deleteTemplate(template.id);
-            setTemplates(prev => prev.filter(t => t.id !== template.id));
-          },
-        },
-      ]
-    );
+  function handleTemplateMenu(template: WorkoutTemplate) {
+    Alert.alert(template.name, undefined, [
+      {
+        text: 'Redigera',
+        onPress: () => navigation.navigate('CreateTemplate', { templateId: template.id }),
+      },
+      {
+        text: 'Ta bort',
+        style: 'destructive',
+        onPress: () =>
+          Alert.alert('Ta bort pass', `Vill du ta bort "${template.name}"? Historiken behålls.`, [
+            { text: 'Avbryt', style: 'cancel' },
+            {
+              text: 'Ta bort',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  await deleteTemplate(template.id);
+                  setTemplates(prev => prev.filter(t => t.id !== template.id));
+                } catch (err) {
+                  Alert.alert('Kunde inte ta bort', err instanceof Error ? err.message : String(err));
+                }
+              },
+            },
+          ]),
+      },
+      { text: 'Stäng', style: 'cancel' },
+    ]);
   }
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <ScrollView contentContainerStyle={s.content}>
-        {/* Header */}
-        <Text style={s.title}>Pass</Text>
+        <Text style={s.title}>Träna</Text>
 
-        {/* Free workout */}
-        <TouchableOpacity style={s.freeBtn} onPress={handleFreeWorkout} activeOpacity={0.85}>
-          <View style={s.freeBtnLeft}>
-            <Ionicons name="flash" size={22} color={COLORS.accent} />
-            <View>
-              <Text style={s.freeBtnTitle}>Starta fritt pass</Text>
-              <Text style={s.freeBtnSub}>Logga övningar fritt utan mall</Text>
-            </View>
+        {active && (
+          <ResumeBanner
+            session={active}
+            onPress={() =>
+              navigation.navigate('ActiveWorkout', {
+                sessionId: active.id,
+                sessionName: active.template_name ?? 'Fritt pass',
+              })
+            }
+          />
+        )}
+
+        <TouchableOpacity
+          style={s.freeBtn}
+          onPress={() => startWorkout(navigation, undefined, 'Fritt pass')}
+          activeOpacity={0.85}
+        >
+          <View style={s.freeIcon}>
+            <Ionicons name="flash" size={20} color="#fff" />
           </View>
-          <Ionicons name="chevron-forward" size={18} color={COLORS.accent} />
+          <View style={{ flex: 1 }}>
+            <Text style={s.freeTitle}>Starta tomt pass</Text>
+            <Text style={s.freeSub}>Lägg till övningar medan du tränar</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#fff" />
         </TouchableOpacity>
 
-        {/* Templates header */}
         <View style={s.sectionHeader}>
-          <Text style={s.sectionTitle}>MALLAR</Text>
-          <TouchableOpacity
-            style={s.newBtn}
-            onPress={() => navigation.navigate('CreateTemplate', {})}
-          >
+          <Text style={s.sectionTitle}>MINA PASS</Text>
+          <TouchableOpacity style={s.newBtn} onPress={() => navigation.navigate('CreateTemplate', {})}>
             <Ionicons name="add" size={16} color={COLORS.accent} />
-            <Text style={s.newBtnText}>Ny mall</Text>
+            <Text style={s.newBtnText}>Nytt pass</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Template list */}
         {templates.length === 0 ? (
-          <View style={s.empty}>
-            <Text style={s.emptyIcon}>📋</Text>
-            <Text style={s.emptyTitle}>Inga mallar ännu</Text>
-            <Text style={s.emptyHint}>Skapa en mall för att spara dina favoritpass</Text>
-          </View>
+          <TouchableOpacity style={s.empty} onPress={() => navigation.navigate('CreateTemplate', {})}>
+            <Ionicons name="clipboard-outline" size={36} color={COLORS.textMuted} />
+            <Text style={s.emptyTitle}>Inga sparade pass ännu</Text>
+            <Text style={s.emptyHint}>
+              Skapa ett pass med dina övningar, set och vikter – så kan du köra det igen med ett tryck.
+            </Text>
+          </TouchableOpacity>
         ) : (
           templates.map(template => (
-            <View key={template.id} style={s.templateCard}>
-              <View style={s.templateInfo}>
-                <Text style={s.templateName}>{template.name}</Text>
-                <Text style={s.templateMeta}>
+            <TouchableOpacity
+              key={template.id}
+              style={s.card}
+              activeOpacity={0.85}
+              onPress={() => startWorkout(navigation, template.id, template.name)}
+              onLongPress={() => handleTemplateMenu(template)}
+            >
+              <View style={s.cardTop}>
+                <Text style={s.cardName} numberOfLines={1}>{template.name}</Text>
+                <TouchableOpacity onPress={() => handleTemplateMenu(template)} hitSlop={10}>
+                  <Ionicons name="ellipsis-horizontal" size={20} color={COLORS.textMuted} />
+                </TouchableOpacity>
+              </View>
+              {template.exercise_names ? (
+                <Text style={s.cardExercises} numberOfLines={2}>{template.exercise_names}</Text>
+              ) : null}
+              <View style={s.cardBottom}>
+                <Text style={s.cardMeta}>
                   {template.exercise_count ?? 0} övningar
+                  {template.last_used ? `  ·  Senast ${fmtRelativeDate(template.last_used).toLowerCase()}` : ''}
                 </Text>
+                <View style={s.startPill}>
+                  <Ionicons name="play" size={12} color="#fff" />
+                  <Text style={s.startText}>Starta</Text>
+                </View>
               </View>
-              <View style={s.templateActions}>
-                <TouchableOpacity
-                  style={s.editBtn}
-                  onPress={() =>
-                    navigation.navigate('CreateTemplate', { templateId: template.id })
-                  }
-                >
-                  <Ionicons name="pencil-outline" size={16} color={COLORS.textMuted} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={s.deleteBtn}
-                  onPress={() => handleDeleteTemplate(template)}
-                >
-                  <Ionicons name="trash-outline" size={16} color={COLORS.danger} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={s.startBtn}
-                  onPress={() => handleStartTemplate(template)}
-                >
-                  <Ionicons name="play" size={14} color="#fff" />
-                  <Text style={s.startBtnText}>Starta</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+            </TouchableOpacity>
           ))
         )}
       </ScrollView>
@@ -137,22 +151,27 @@ export default function WorkoutScreen() {
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
   content: { padding: 16, paddingBottom: 40 },
-  title: { fontSize: 26, fontWeight: '700', color: COLORS.text, letterSpacing: -0.5, marginBottom: 16 },
+  title: { fontSize: 30, fontWeight: '800', color: COLORS.text, letterSpacing: -0.6, marginBottom: 16 },
 
   freeBtn: {
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.accentBorder,
+    backgroundColor: COLORS.accent,
+    borderRadius: RADIUS.lg,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 14,
     marginBottom: 28,
   },
-  freeBtnLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  freeBtnTitle: { color: COLORS.text, fontWeight: '600', fontSize: 16 },
-  freeBtnSub: { color: COLORS.textMuted, fontSize: 12, marginTop: 2 },
+  freeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  freeTitle: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  freeSub: { color: 'rgba(255,255,255,0.75)', fontSize: 13, marginTop: 2 },
 
   sectionHeader: {
     flexDirection: 'row',
@@ -160,53 +179,49 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 12,
   },
-  sectionTitle: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: COLORS.textMuted,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
+  sectionTitle: { fontSize: 12, fontWeight: '700', color: COLORS.textMuted, letterSpacing: 0.8 },
   newBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: COLORS.accentDim,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: RADIUS.full,
   },
-  newBtnText: { color: COLORS.accent, fontSize: 13, fontWeight: '600' },
+  newBtnText: { color: COLORS.accent, fontSize: 13, fontWeight: '700' },
 
-  empty: { alignItems: 'center', paddingVertical: 40 },
-  emptyIcon: { fontSize: 48, marginBottom: 12 },
-  emptyTitle: { color: COLORS.text, fontSize: 16, fontWeight: '600' },
-  emptyHint: { color: COLORS.textMuted, fontSize: 13, marginTop: 6, textAlign: 'center' },
-
-  templateCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.md,
+  empty: {
+    alignItems: 'center',
+    padding: 28,
+    gap: 8,
+    borderRadius: RADIUS.lg,
     borderWidth: 1,
+    borderStyle: 'dashed',
     borderColor: COLORS.border,
-    padding: 14,
+  },
+  emptyTitle: { color: COLORS.text, fontSize: 16, fontWeight: '700' },
+  emptyHint: { color: COLORS.textMuted, fontSize: 13, textAlign: 'center', lineHeight: 19 },
+
+  card: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    padding: 16,
     marginBottom: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
   },
-  templateInfo: { flex: 1 },
-  templateName: { color: COLORS.text, fontWeight: '600', fontSize: 15 },
-  templateMeta: { color: COLORS.textMuted, fontSize: 12, marginTop: 2 },
-  templateActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  editBtn: { padding: 6 },
-  deleteBtn: { padding: 6 },
-  startBtn: {
-    backgroundColor: COLORS.accent,
-    borderRadius: RADIUS.md,
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  cardName: { flex: 1, color: COLORS.text, fontWeight: '800', fontSize: 17 },
+  cardExercises: { color: COLORS.textMuted, fontSize: 13, marginTop: 6, lineHeight: 18 },
+  cardBottom: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
+  cardMeta: { flex: 1, color: COLORS.textMuted, fontSize: 12 },
+  startPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
     gap: 4,
+    backgroundColor: COLORS.accent,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
-  startBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  startText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 });

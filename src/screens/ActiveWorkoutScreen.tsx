@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   Vibration,
-  Animated,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
@@ -21,426 +22,619 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { COLORS, RADIUS } from '../theme';
 import {
   addSessionSet,
+  updateSessionSet,
   removeSessionSet,
   completeSession,
   cancelSession,
   getTemplateExercises,
   getSessionById,
+  getSessionSets,
   getPreviousPerformance,
 } from '../database';
 import ExercisePicker from '../components/ExercisePicker';
-import type { WorkoutExercise, WorkoutSet, SessionSet, Exercise } from '../types';
+import ExerciseHistoryList from '../components/ExerciseHistoryList';
+import { fmtKg, fmtSet, parseNum } from '../utils/format';
+import type { SessionSet, Exercise } from '../types';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 
 type RouteP = RouteProp<RootStackParamList, 'ActiveWorkout'>;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-// ─── Timer hook ──────────────────────────────────────────────────────────────
-function useTimer(startedAt: number): string {
-  const [elapsed, setElapsed] = useState(0);
+const DEFAULT_REST = 90;
+
+interface Row {
+  key: string;
+  reps: string;
+  weight: string;
+  dbId: number | null; // non-null = logged (saved) set
+}
+
+interface ExState {
+  key: string;
+  exerciseId: string;
+  name: string;
+  bodyPart: string | null;
+  restSeconds: number;
+  targetSets: number | null;
+  targetReps: number | null;
+  targetWeight: number | null;
+  prev: SessionSet[];
+  rows: Row[];
+}
+
+let rowCounter = 0;
+function newRow(partial: Partial<Row> = {}): Row {
+  rowCounter += 1;
+  return { key: `r${rowCounter}`, reps: '', weight: '', dbId: null, ...partial };
+}
+
+// ─── Timers ─────────────────────────────────────────────────────────────────
+function useElapsed(startedAt: number | null): string {
+  const [now, setNow] = useState(Date.now());
   useEffect(() => {
-    const iv = setInterval(() => setElapsed(Date.now() - startedAt), 1000);
+    const iv = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(iv);
-  }, [startedAt]);
-  const s = Math.floor(elapsed / 1000);
+  }, []);
+  if (!startedAt) return '00:00';
+  const s = Math.max(0, Math.floor((now - startedAt) / 1000));
   const m = Math.floor(s / 60);
   const h = Math.floor(m / 60);
-  if (h > 0) return `${h}:${String(m % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-  return `${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m % 60)}:${pad(s % 60)}` : `${pad(m)}:${pad(s % 60)}`;
 }
 
-// ─── Rest timer hook ──────────────────────────────────────────────────────────
-interface RestState { remaining: number; total: number }
+// Rest timer based on an end timestamp so it stays correct if the app is backgrounded
+function useRestTimer() {
+  const [endAt, setEndAt] = useState<number | null>(null);
+  const [total, setTotal] = useState(0);
+  const [now, setNow] = useState(Date.now());
 
-function useRestTimer(onDone: () => void) {
-  const [rest, setRest] = useState<RestState | null>(null);
-  const iv = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (!endAt) return;
+    const iv = setInterval(() => {
+      const t = Date.now();
+      setNow(t);
+      if (t >= endAt) {
+        Vibration.vibrate([0, 300, 100, 300, 100, 300]);
+        setEndAt(null);
+      }
+    }, 250);
+    return () => clearInterval(iv);
+  }, [endAt]);
 
-  function start(seconds: number) {
-    if (iv.current) clearInterval(iv.current);
-    setRest({ remaining: seconds, total: seconds });
-    iv.current = setInterval(() => {
-      setRest(prev => {
-        if (!prev || prev.remaining <= 1) {
-          clearInterval(iv.current!);
-          onDone();
-          return null;
-        }
-        return { ...prev, remaining: prev.remaining - 1 };
-      });
-    }, 1000);
-  }
-
-  function skip() {
-    if (iv.current) clearInterval(iv.current);
-    setRest(null);
-  }
-
-  useEffect(() => () => { if (iv.current) clearInterval(iv.current); }, []);
-
-  return { rest, start, skip };
+  return {
+    remaining: endAt ? Math.max(0, Math.ceil((endAt - now) / 1000)) : 0,
+    total,
+    active: endAt != null,
+    start(seconds: number) {
+      setTotal(seconds);
+      setNow(Date.now());
+      setEndAt(Date.now() + seconds * 1000);
+    },
+    adjust(delta: number) {
+      setEndAt(prev => (prev ? Math.max(Date.now() + 1000, prev + delta * 1000) : prev));
+      setTotal(t => Math.max(1, t + delta));
+    },
+    skip() {
+      setEndAt(null);
+    },
+  };
 }
 
+// ─── Screen ─────────────────────────────────────────────────────────────────
 export default function ActiveWorkoutScreen() {
   const navigation = useNavigation<Nav>();
   const { params } = useRoute<RouteP>();
   const { sessionId, sessionName } = params;
 
-  const startTime = useRef(Date.now());
-  const timer = useTimer(startTime.current);
-  const scrollRef = useRef<ScrollView>(null);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const elapsed = useElapsed(startedAt);
+  const rest = useRestTimer();
 
-  const [exercises, setExercises] = useState<WorkoutExercise[]>([]);
-  const [currentIdx, setCurrentIdx] = useState(0);
-  const [prevPerf, setPrevPerf] = useState<Record<string, SessionSet[]>>({});
-  const [inputs, setInputs] = useState<Record<string, { reps: string; weight: string }>>({});
-  const [done, setDone] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [exercises, setExercises] = useState<ExState[]>([]);
   const [showPicker, setShowPicker] = useState(false);
+  const [historyFor, setHistoryFor] = useState<ExState | null>(null);
+  const [finishing, setFinishing] = useState(false);
+  const busy = useRef<Set<string>>(new Set());
+  const exercisesRef = useRef<ExState[]>([]);
+  exercisesRef.current = exercises;
 
-  // Rest timer
-  const { rest, start: startRest, skip: skipRest } = useRestTimer(() => {
-    Vibration.vibrate([0, 300, 100, 300, 100, 300]);
-  });
-
-  // Load template exercises on mount; auto-open picker for free workouts
+  // Load template + any sets already logged (resuming an unfinished session)
   useEffect(() => {
     async function load() {
       const session = await getSessionById(sessionId);
-      if (!session?.template_id) {
-        setShowPicker(true); // free workout – let user pick first exercise
+      if (!session) {
+        Alert.alert('Passet finns inte längre');
+        navigation.goBack();
         return;
       }
-      const tes = await getTemplateExercises(session.template_id);
-      const exs: WorkoutExercise[] = tes.map(te => ({
+      setStartedAt(new Date(session.started_at).getTime());
+
+      const [tes, logged] = await Promise.all([
+        session.template_id ? getTemplateExercises(session.template_id) : Promise.resolve([]),
+        getSessionSets(sessionId),
+      ]);
+
+      const list: ExState[] = tes.map((te, i) => ({
+        key: `t${i}-${te.exercise_id}`,
         exerciseId: te.exercise_id,
         name: te.exercise_name ?? '',
         bodyPart: te.bodyPart ?? null,
-        restSeconds: te.rest_seconds,
-        sets: [],
+        restSeconds: te.rest_seconds > 0 ? te.rest_seconds : DEFAULT_REST,
+        targetSets: te.sets,
+        targetReps: te.reps_min,
+        targetWeight: te.weight_kg ?? null,
+        prev: [],
+        rows: [],
       }));
-      setExercises(exs);
-      loadPrevPerf(exs.map(e => e.exerciseId));
+
+      // Attach logged sets; exercises not in the template are appended in logged order
+      for (const set of logged) {
+        let ex = list.find(e => e.exerciseId === set.exercise_id);
+        if (!ex) {
+          ex = {
+            key: `l-${set.exercise_id}`,
+            exerciseId: set.exercise_id,
+            name: set.exercise_name ?? set.exercise_id,
+            bodyPart: null,
+            restSeconds: DEFAULT_REST,
+            targetSets: null,
+            targetReps: null,
+            targetWeight: null,
+            prev: [],
+            rows: [],
+          };
+          list.push(ex);
+        }
+        ex.rows.push(
+          newRow({
+            dbId: set.id,
+            reps: set.reps != null ? String(set.reps) : '',
+            weight: set.weight_kg != null ? String(set.weight_kg) : '',
+          })
+        );
+      }
+
+      // Fill up to the planned number of sets
+      for (const ex of list) {
+        const planned = Math.max(ex.targetSets ?? 1, 1);
+        while (ex.rows.length < planned) ex.rows.push(newRow());
+      }
+
+      // Previous performance for each exercise
+      await Promise.all(
+        list.map(async ex => {
+          ex.prev = await getPreviousPerformance(ex.exerciseId, sessionId);
+          // Free exercises: plan as many sets as last time
+          if (ex.targetSets == null && ex.prev.length > ex.rows.length) {
+            while (ex.rows.length < ex.prev.length) ex.rows.push(newRow());
+          }
+        })
+      );
+
+      setExercises(list);
+      setLoading(false);
+      if (list.length === 0) setShowPicker(true);
     }
-    load();
+    load().catch(err => {
+      setLoading(false);
+      Alert.alert('Kunde inte ladda passet', err instanceof Error ? err.message : String(err));
+    });
   }, [sessionId]);
 
-  async function loadPrevPerf(exerciseIds: string[]) {
-    const entries = await Promise.all(
-      exerciseIds.map(async id => {
-        const sets = await getPreviousPerformance(id, sessionId);
-        return [id, sets] as [string, SessionSet[]];
-      })
-    );
-    setPrevPerf(Object.fromEntries(entries));
+  // ─── Helpers ──────────────────────────────────────────────────────────────
+  // Suggested values for a row: last time's matching set → template target → previous row
+  function suggestion(ex: ExState, idx: number): { reps: string; weight: string } {
+    const p = ex.prev[idx] ?? ex.prev[ex.prev.length - 1];
+    if (p) {
+      return {
+        reps: p.reps != null ? String(p.reps) : '',
+        weight: p.weight_kg != null ? String(p.weight_kg) : '',
+      };
+    }
+    if (ex.targetReps != null || ex.targetWeight) {
+      return {
+        reps: ex.targetReps != null ? String(ex.targetReps) : '',
+        weight: ex.targetWeight ? String(ex.targetWeight) : '',
+      };
+    }
+    const before = ex.rows[idx - 1];
+    return before ? { reps: before.reps, weight: before.weight } : { reps: '', weight: '' };
   }
 
-  function inp(id: string) {
-    return inputs[id] ?? { reps: '', weight: '' };
+  function updateEx(key: string, fn: (ex: ExState) => ExState) {
+    setExercises(prev => prev.map(e => (e.key === key ? fn(e) : e)));
   }
 
-  function setInp(id: string, field: 'reps' | 'weight', v: string) {
-    setInputs(prev => ({ ...prev, [id]: { ...inp(id), [field]: v } }));
+  function setRowField(exKey: string, rowKey: string, field: 'reps' | 'weight', value: string) {
+    updateEx(exKey, ex => ({
+      ...ex,
+      rows: ex.rows.map(r => (r.key === rowKey ? { ...r, [field]: value } : r)),
+    }));
   }
 
-  async function handleLogSet(exercise: WorkoutExercise) {
-    const i = inp(exercise.exerciseId);
-    const reps = parseInt(i.reps) || null;
-    const weight = parseFloat(i.weight) || null;
-    const setNumber = exercise.sets.length + 1;
-
-    const dbId = await addSessionSet(sessionId, exercise.exerciseId, setNumber, reps, weight, false);
-
-    const newSet: WorkoutSet = {
-      dbId,
-      setNumber,
-      reps: i.reps,
-      weightKg: i.weight,
-      isWarmup: false,
-    };
-
-    setExercises(prev =>
-      prev.map(ex =>
-        ex.exerciseId === exercise.exerciseId ? { ...ex, sets: [...ex.sets, newSet] } : ex
-      )
-    );
-
-    // Clear reps only, keep weight
-    setInputs(prev => ({ ...prev, [exercise.exerciseId]: { ...inp(exercise.exerciseId), reps: '' } }));
-
-    // Start rest timer
-    if (exercise.restSeconds > 0) startRest(exercise.restSeconds);
+  // Persist edits made to an already logged set
+  async function persistRow(exKey: string, rowKey: string) {
+    // Read the latest state – the render closure may be one keystroke behind
+    const ex = exercisesRef.current.find(e => e.key === exKey);
+    const row = ex?.rows.find(r => r.key === rowKey);
+    if (!ex || !row?.dbId) return;
+    const idx = ex.rows.findIndex(r => r.key === row.key);
+    const sug = suggestion(ex, idx);
+    const reps = parseNum(row.reps || sug.reps);
+    const weight = parseNum(row.weight || sug.weight);
+    await updateSessionSet(row.dbId, idx + 1, reps != null ? Math.round(reps) : null, weight);
   }
 
-  async function handleRemoveSet(exerciseId: string, set: WorkoutSet) {
-    await removeSessionSet(set.dbId);
-    setExercises(prev =>
-      prev.map(ex =>
-        ex.exerciseId === exerciseId
-          ? { ...ex, sets: ex.sets.filter(s => s.dbId !== set.dbId) }
-          : ex
-      )
-    );
-  }
-
-  function handleMarkDone(exerciseId: string) {
-    setDone(prev => new Set([...prev, exerciseId]));
-    const nextIdx = exercises.findIndex((e, i) => i > currentIdx && !done.has(e.exerciseId));
-    if (nextIdx !== -1) {
-      setCurrentIdx(nextIdx);
-      setTimeout(() => {
-        scrollRef.current?.scrollTo({ y: nextIdx * 280, animated: true });
-      }, 100);
+  async function toggleRow(ex: ExState, row: Row) {
+    if (busy.current.has(row.key)) return;
+    busy.current.add(row.key);
+    try {
+      const idx = ex.rows.findIndex(r => r.key === row.key);
+      if (row.dbId) {
+        await removeSessionSet(row.dbId);
+        updateEx(ex.key, e => ({
+          ...e,
+          rows: e.rows.map(r => (r.key === row.key ? { ...r, dbId: null } : r)),
+        }));
+        return;
+      }
+      const sug = suggestion(ex, idx);
+      const repsStr = row.reps || sug.reps;
+      const weightStr = row.weight || sug.weight;
+      const reps = parseNum(repsStr);
+      const weight = parseNum(weightStr);
+      if (reps == null) {
+        Alert.alert('Ange reps', 'Fyll i antal repetitioner för setet.');
+        return;
+      }
+      const dbId = await addSessionSet(
+        sessionId,
+        ex.exerciseId,
+        idx + 1,
+        Math.round(reps),
+        weight,
+        false
+      );
+      updateEx(ex.key, e => ({
+        ...e,
+        rows: e.rows.map(r =>
+          r.key === row.key ? { ...r, dbId, reps: repsStr, weight: weightStr } : r
+        ),
+      }));
+      rest.start(ex.restSeconds);
+    } catch (err) {
+      Alert.alert('Kunde inte spara setet', err instanceof Error ? err.message : String(err));
+    } finally {
+      busy.current.delete(row.key);
     }
   }
 
-  function handleAddExercise(exercise: Exercise) {
-    if (exercises.some(e => e.exerciseId === exercise.id)) {
-      setShowPicker(false);
-      return;
-    }
-    const newEx: WorkoutExercise = {
+  function addRow(ex: ExState) {
+    updateEx(ex.key, e => ({ ...e, rows: [...e.rows, newRow()] }));
+  }
+
+  async function removeRow(ex: ExState, row: Row) {
+    if (row.dbId) await removeSessionSet(row.dbId);
+    updateEx(ex.key, e => ({ ...e, rows: e.rows.filter(r => r.key !== row.key) }));
+  }
+
+  async function handleAddExercise(exercise: Exercise) {
+    setShowPicker(false);
+    const prev = await getPreviousPerformance(exercise.id, sessionId);
+    const rowCount = Math.max(prev.length, 3);
+    const ex: ExState = {
+      key: `a${Date.now()}-${exercise.id}`,
       exerciseId: exercise.id,
       name: exercise.name,
       bodyPart: exercise.bodyPart,
-      restSeconds: 60,
-      sets: [],
+      restSeconds: DEFAULT_REST,
+      targetSets: null,
+      targetReps: null,
+      targetWeight: null,
+      prev,
+      rows: Array.from({ length: rowCount }, () => newRow()),
     };
-    setExercises(prev => [...prev, newEx]);
-    loadPrevPerf([exercise.id]);
-    setShowPicker(false);
+    setExercises(list => [...list, ex]);
   }
 
-  async function handleRemoveExercise(exerciseId: string) {
-    Alert.alert('Ta bort övning', 'Ta bort övningen och alla loggade set?', [
-      { text: 'Avbryt', style: 'cancel' },
+  function handleRemoveExercise(ex: ExState) {
+    const logged = ex.rows.filter(r => r.dbId).length;
+    Alert.alert(
+      'Ta bort övning',
+      logged > 0 ? `${ex.name} och ${logged} loggade set tas bort.` : `Ta bort ${ex.name} från passet?`,
+      [
+        { text: 'Avbryt', style: 'cancel' },
+        {
+          text: 'Ta bort',
+          style: 'destructive',
+          onPress: async () => {
+            for (const r of ex.rows) if (r.dbId) await removeSessionSet(r.dbId);
+            setExercises(list => list.filter(e => e.key !== ex.key));
+          },
+        },
+      ]
+    );
+  }
+
+  // ─── Finish / cancel ──────────────────────────────────────────────────────
+  const loggedCount = exercises.reduce((a, e) => a + e.rows.filter(r => r.dbId).length, 0);
+  const plannedCount = exercises.reduce((a, e) => a + e.rows.length, 0);
+  const pendingFilled = exercises.reduce(
+    (a, e) => a + e.rows.filter(r => !r.dbId && r.reps.trim() !== '').length,
+    0
+  );
+
+  async function finish(logPending: boolean) {
+    setFinishing(true);
+    try {
+      for (const ex of exercises) {
+        let n = 0;
+        for (let i = 0; i < ex.rows.length; i++) {
+          const row = ex.rows[i];
+          const sug = suggestion(ex, i);
+          const reps = parseNum(row.reps || sug.reps);
+          const weight = parseNum(row.weight || sug.weight);
+          if (row.dbId) {
+            n += 1;
+            await updateSessionSet(row.dbId, n, reps != null ? Math.round(reps) : null, weight);
+          } else if (logPending && row.reps.trim() !== '' && reps != null) {
+            n += 1;
+            await addSessionSet(sessionId, ex.exerciseId, n, Math.round(reps), weight, false);
+          }
+        }
+      }
+      await completeSession(sessionId);
+      navigation.replace('SessionDetail', { sessionId });
+    } catch (err) {
+      setFinishing(false);
+      Alert.alert('Kunde inte spara passet', err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  function handleFinish() {
+    if (loggedCount === 0 && pendingFilled === 0) {
+      Alert.alert('Inga set loggade', 'Bocka av minst ett set innan du avslutar passet.');
+      return;
+    }
+    if (pendingFilled > 0) {
+      Alert.alert(
+        'Ej avbockade set',
+        `${pendingFilled} set har värden men är inte avbockade. Vill du spara dem också?`,
+        [
+          { text: 'Avbryt', style: 'cancel' },
+          { text: 'Hoppa över dem', onPress: () => finish(false) },
+          { text: 'Spara dem', onPress: () => finish(true) },
+        ]
+      );
+      return;
+    }
+    Alert.alert('Avsluta pass', `Spara passet med ${loggedCount} set?`, [
+      { text: 'Fortsätt träna', style: 'cancel' },
+      { text: 'Avsluta & spara', onPress: () => finish(false) },
+    ]);
+  }
+
+  function handleDiscard() {
+    Alert.alert('Kasta pass', 'Passet och alla loggade set tas bort permanent.', [
+      { text: 'Behåll', style: 'cancel' },
       {
-        text: 'Ta bort',
+        text: 'Kasta pass',
         style: 'destructive',
         onPress: async () => {
-          const ex = exercises.find(e => e.exerciseId === exerciseId);
-          if (ex) for (const set of ex.sets) await removeSessionSet(set.dbId);
-          setExercises(prev => prev.filter(e => e.exerciseId !== exerciseId));
-          setDone(prev => { const n = new Set(prev); n.delete(exerciseId); return n; });
+          await cancelSession(sessionId);
+          navigation.goBack();
         },
       },
     ]);
   }
 
-  async function handleComplete() {
-    const totalSets = exercises.reduce((a, e) => a + e.sets.length, 0);
-    if (totalSets === 0) {
-      Alert.alert('Inga set loggade', 'Logga minst ett set innan du avslutar.');
-      return;
-    }
-    await completeSession(sessionId);
-    navigation.navigate('SessionDetail', { sessionId });
-  }
-
-  async function handleCancel() {
-    Alert.alert('Avbryt pass', 'Passet och alla loggade set tas bort.', [
-      { text: 'Fortsätt träna', style: 'cancel' },
-      {
-        text: 'Avbryt pass',
-        style: 'destructive',
-        onPress: async () => { await cancelSession(sessionId); navigation.goBack(); },
-      },
-    ]);
-  }
-
-  const remaining = exercises.filter(e => !done.has(e.exerciseId));
-  const completedCount = done.size;
-
+  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
-      {/* ── Session header ── */}
       <View style={s.header}>
-        <View>
-          <Text style={s.sessionName}>{sessionName}</Text>
-          <Text style={s.timer}>{timer}</Text>
+        <TouchableOpacity style={s.iconBtn} onPress={() => navigation.goBack()} hitSlop={8}>
+          <Ionicons name="chevron-down" size={22} color={COLORS.text} />
+        </TouchableOpacity>
+        <View style={s.headerCenter}>
+          <Text style={s.sessionName} numberOfLines={1}>{sessionName}</Text>
+          <Text style={s.timer}>
+            {elapsed}  ·  {loggedCount}/{plannedCount} set
+          </Text>
         </View>
-        <View style={s.progress}>
-          <Text style={s.progressText}>{completedCount}/{exercises.length} övn</Text>
-        </View>
-        <View style={s.headerBtns}>
-          <TouchableOpacity style={s.cancelBtn} onPress={handleCancel}>
-            <Text style={s.cancelText}>Avbryt</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={s.finishBtn} onPress={handleComplete}>
-            <Ionicons name="checkmark" size={15} color="#fff" />
+        <TouchableOpacity
+          style={[s.finishBtn, finishing && { opacity: 0.6 }]}
+          onPress={handleFinish}
+          disabled={finishing}
+        >
+          {finishing ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
             <Text style={s.finishText}>Avsluta</Text>
-          </TouchableOpacity>
-        </View>
+          )}
+        </TouchableOpacity>
+      </View>
+      <View style={s.progressTrack}>
+        <View
+          style={[
+            s.progressFill,
+            { width: `${plannedCount ? Math.round((loggedCount / plannedCount) * 100) : 0}%` },
+          ]}
+        />
       </View>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView ref={scrollRef} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        {loading ? (
+          <View style={s.center}>
+            <ActivityIndicator color={COLORS.accent} />
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+            {exercises.length === 0 && (
+              <View style={s.emptyWrap}>
+                <Ionicons name="barbell-outline" size={44} color={COLORS.textMuted} />
+                <Text style={s.emptyTitle}>Inga övningar än</Text>
+                <Text style={s.emptyHint}>Lägg till din första övning nedan</Text>
+              </View>
+            )}
 
-          {exercises.length === 0 ? (
-            <View style={s.emptyWrap}>
-              <Text style={s.emptyIcon}>💪</Text>
-              <Text style={s.emptyTitle}>Inga övningar än</Text>
-              <Text style={s.emptyHint}>Lägg till en övning nedan</Text>
-            </View>
-          ) : (
-            exercises.map((exercise, idx) => {
-              const isDone = done.has(exercise.exerciseId);
-              const isCurrent = idx === currentIdx && !isDone;
-              const prev = prevPerf[exercise.exerciseId] ?? [];
-              const i = inp(exercise.exerciseId);
-
+            {exercises.map(ex => {
+              const allDone = ex.rows.length > 0 && ex.rows.every(r => r.dbId);
+              const targetText =
+                ex.targetSets != null
+                  ? `Mål ${ex.targetSets}×${ex.targetReps ?? '–'}${
+                      ex.targetWeight ? ` · ${fmtKg(ex.targetWeight)} kg` : ''
+                    }`
+                  : null;
               return (
-                <View
-                  key={exercise.exerciseId}
-                  style={[
-                    s.exCard,
-                    isCurrent && s.exCardActive,
-                    isDone && s.exCardDone,
-                  ]}
-                >
-                  {/* Exercise header */}
+                <View key={ex.key} style={[s.exCard, allDone && s.exCardDone]}>
                   <View style={s.exHeader}>
-                    <View style={s.exHeaderLeft}>
-                      <Text style={s.exName}>{exercise.name}</Text>
-                      {exercise.bodyPart ? (
-                        <Text style={s.exMeta}>{exercise.bodyPart}</Text>
-                      ) : null}
-                    </View>
-                    <View style={s.exHeaderRight}>
-                      {isDone && (
-                        <View style={s.doneBadge}>
-                          <Ionicons name="checkmark-circle" size={14} color={COLORS.green} />
-                          <Text style={s.doneBadgeText}>Klar</Text>
-                        </View>
-                      )}
-                      <TouchableOpacity onPress={() => handleRemoveExercise(exercise.exerciseId)}>
-                        <Ionicons name="close-circle-outline" size={20} color={COLORS.danger} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  {/* Previous performance */}
-                  {prev.length > 0 && (
-                    <View style={s.prevWrap}>
-                      <Text style={s.prevLabel}>Förra gången:</Text>
-                      <Text style={s.prevData}>
-                        {prev
-                          .map(
-                            p =>
-                              `Set ${p.set_number}: ${p.reps ?? '—'} reps${
-                                p.weight_kg ? ` @ ${p.weight_kg} kg` : ''
-                              }`
-                          )
+                    <TouchableOpacity style={{ flex: 1 }} onPress={() => setHistoryFor(ex)}>
+                      <Text style={s.exName}>{ex.name}</Text>
+                      <Text style={s.exMeta}>
+                        {[targetText, ex.prev.length ? `Förra: ${fmtSet(ex.prev[0])}` : 'Första gången']
+                          .filter(Boolean)
                           .join('  ·  ')}
                       </Text>
-                    </View>
-                  )}
-
-                  {/* Logged sets */}
-                  {exercise.sets.length > 0 && (
-                    <View style={s.setsTable}>
-                      <View style={s.setsHead}>
-                        <Text style={[s.col, s.colSet]}>Set</Text>
-                        <Text style={[s.col, s.colVal]}>Reps</Text>
-                        <Text style={[s.col, s.colVal]}>Kg</Text>
-                        <View style={{ width: 24 }} />
-                      </View>
-                      {exercise.sets.map(set => (
-                        <View key={set.dbId} style={s.setRow}>
-                          <Text style={[s.col, s.colSet, s.setTxt]}>{set.setNumber}</Text>
-                          <Text style={[s.col, s.colVal, s.setTxt]}>{set.reps || '—'}</Text>
-                          <Text style={[s.col, s.colVal, s.setTxt]}>{set.weightKg || '—'}</Text>
-                          <TouchableOpacity onPress={() => handleRemoveSet(exercise.exerciseId, set)}>
-                            <Ionicons name="close" size={15} color={COLORS.danger} />
-                          </TouchableOpacity>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  {/* Input row */}
-                  {!isDone && (
-                    <View style={s.inputRow}>
-                      <TextInput
-                        style={s.setInput}
-                        placeholder={`Set ${exercise.sets.length + 1}`}
-                        placeholderTextColor={COLORS.textMuted}
-                        value={i.reps}
-                        onChangeText={v => setInp(exercise.exerciseId, 'reps', v)}
-                        keyboardType="number-pad"
-                        returnKeyType="next"
-                      />
-                      <Text style={s.inputSep}>reps</Text>
-                      <TextInput
-                        style={s.setInput}
-                        placeholder="0"
-                        placeholderTextColor={COLORS.textMuted}
-                        value={i.weight}
-                        onChangeText={v => setInp(exercise.exerciseId, 'weight', v)}
-                        keyboardType="decimal-pad"
-                        returnKeyType="done"
-                        onSubmitEditing={() => handleLogSet(exercise)}
-                      />
-                      <Text style={s.inputSep}>kg</Text>
-                      <TouchableOpacity
-                        style={s.logBtn}
-                        onPress={() => handleLogSet(exercise)}
-                      >
-                        <Ionicons name="checkmark" size={16} color="#fff" />
-                        <Text style={s.logBtnText}>Avsluta set</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-
-                  {/* Mark done / next */}
-                  {!isDone && exercise.sets.length > 0 && (
-                    <TouchableOpacity
-                      style={s.markDoneBtn}
-                      onPress={() => handleMarkDone(exercise.exerciseId)}
-                    >
-                      <Ionicons name="checkmark-circle-outline" size={16} color={COLORS.green} />
-                      <Text style={s.markDoneText}>
-                        Övning klar → nästa övning
-                      </Text>
                     </TouchableOpacity>
-                  )}
+                    <TouchableOpacity style={s.smallIcon} onPress={() => setHistoryFor(ex)} hitSlop={6}>
+                      <Ionicons name="stats-chart" size={16} color={COLORS.accent} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={s.smallIcon} onPress={() => handleRemoveExercise(ex)} hitSlop={6}>
+                      <Ionicons name="trash-outline" size={16} color={COLORS.textMuted} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={s.tableHead}>
+                    <Text style={[s.th, s.cSet]}>SET</Text>
+                    <Text style={[s.th, s.cPrev]}>FÖRRA</Text>
+                    <Text style={[s.th, s.cIn]}>KG</Text>
+                    <Text style={[s.th, s.cIn]}>REPS</Text>
+                    <View style={s.cCheck} />
+                  </View>
+
+                  {ex.rows.map((row, idx) => {
+                    const sug = suggestion(ex, idx);
+                    const p = ex.prev[idx];
+                    const logged = row.dbId != null;
+                    return (
+                      <View key={row.key} style={[s.setRow, logged && s.setRowDone]}>
+                        <TouchableOpacity
+                          style={s.cSet}
+                          onLongPress={() =>
+                            Alert.alert('Ta bort set', `Ta bort set ${idx + 1}?`, [
+                              { text: 'Avbryt', style: 'cancel' },
+                              { text: 'Ta bort', style: 'destructive', onPress: () => removeRow(ex, row) },
+                            ])
+                          }
+                        >
+                          <Text style={[s.setNum, logged && s.setNumDone]}>{idx + 1}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={s.cPrev}
+                          disabled={!p || logged}
+                          onPress={() =>
+                            p &&
+                            updateEx(ex.key, e => ({
+                              ...e,
+                              rows: e.rows.map(r =>
+                                r.key === row.key
+                                  ? {
+                                      ...r,
+                                      weight: p.weight_kg != null ? String(p.weight_kg) : '',
+                                      reps: p.reps != null ? String(p.reps) : '',
+                                    }
+                                  : r
+                              ),
+                            }))
+                          }
+                        >
+                          <Text style={s.prevText} numberOfLines={1}>
+                            {p ? `${p.weight_kg ? fmtKg(p.weight_kg) + '×' : ''}${p.reps ?? '–'}` : '–'}
+                          </Text>
+                        </TouchableOpacity>
+                        <TextInput
+                          style={[s.input, s.cIn, logged && s.inputDone]}
+                          value={row.weight}
+                          placeholder={sug.weight || '0'}
+                          placeholderTextColor={COLORS.textMuted}
+                          keyboardType="decimal-pad"
+                          selectTextOnFocus
+                          onChangeText={v => setRowField(ex.key, row.key, 'weight', v)}
+                          onEndEditing={() => persistRow(ex.key, row.key)}
+                        />
+                        <TextInput
+                          style={[s.input, s.cIn, logged && s.inputDone]}
+                          value={row.reps}
+                          placeholder={sug.reps || '0'}
+                          placeholderTextColor={COLORS.textMuted}
+                          keyboardType="number-pad"
+                          selectTextOnFocus
+                          onChangeText={v => setRowField(ex.key, row.key, 'reps', v)}
+                          onEndEditing={() => persistRow(ex.key, row.key)}
+                        />
+                        <TouchableOpacity
+                          style={[s.cCheck, s.checkBtn, logged && s.checkBtnDone]}
+                          onPress={() => toggleRow(ex, row)}
+                          hitSlop={6}
+                        >
+                          <Ionicons name="checkmark" size={20} color={logged ? '#fff' : COLORS.textMuted} />
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+
+                  <TouchableOpacity style={s.addSetBtn} onPress={() => addRow(ex)}>
+                    <Ionicons name="add" size={16} color={COLORS.text} />
+                    <Text style={s.addSetText}>Lägg till set</Text>
+                  </TouchableOpacity>
                 </View>
               );
-            })
-          )}
+            })}
 
-          {/* Add exercise */}
-          <TouchableOpacity style={s.addExBtn} onPress={() => setShowPicker(true)}>
-            <Ionicons name="add-circle-outline" size={20} color={COLORS.accent} />
-            <Text style={s.addExText}>Lägg till övning</Text>
-          </TouchableOpacity>
-        </ScrollView>
+            <TouchableOpacity style={s.addExBtn} onPress={() => setShowPicker(true)}>
+              <Ionicons name="add-circle-outline" size={20} color={COLORS.accent} />
+              <Text style={s.addExText}>Lägg till övning</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={s.discardBtn} onPress={handleDiscard}>
+              <Text style={s.discardText}>Kasta pass</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        )}
       </KeyboardAvoidingView>
 
-      {/* ── Rest timer bar ── */}
-      {rest && (
+      {rest.active && (
         <View style={s.restBar}>
-          <View style={s.restInfo}>
-            <Ionicons name="timer-outline" size={18} color={COLORS.green} />
-            <Text style={s.restLabel}>Vila</Text>
-            <Text style={[s.restCountdown, rest.remaining <= 5 && s.restCountdownUrgent]}>
-              {rest.remaining}s
-            </Text>
-          </View>
-          {/* Progress */}
           <View style={s.restTrack}>
             <View
               style={[
                 s.restFill,
-                {
-                  width: `${Math.round((rest.remaining / rest.total) * 100)}%` as any,
-                  backgroundColor: rest.remaining <= 5 ? COLORS.danger : COLORS.green,
-                },
+                { width: `${Math.round((rest.remaining / Math.max(rest.total, 1)) * 100)}%` },
               ]}
             />
           </View>
-          <TouchableOpacity style={s.skipBtn} onPress={skipRest}>
-            <Text style={s.skipText}>Hoppa över</Text>
-          </TouchableOpacity>
+          <View style={s.restRow}>
+            <TouchableOpacity style={s.restAdj} onPress={() => rest.adjust(-15)}>
+              <Text style={s.restAdjText}>−15</Text>
+            </TouchableOpacity>
+            <View style={s.restCenter}>
+              <Text style={s.restLabel}>Vila</Text>
+              <Text style={s.restTime}>
+                {Math.floor(rest.remaining / 60)}:{String(rest.remaining % 60).padStart(2, '0')}
+              </Text>
+            </View>
+            <TouchableOpacity style={s.restAdj} onPress={() => rest.adjust(15)}>
+              <Text style={s.restAdjText}>+15</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.skipBtn} onPress={rest.skip}>
+              <Text style={s.skipText}>Hoppa över</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -449,205 +643,193 @@ export default function ActiveWorkoutScreen() {
         onSelect={handleAddExercise}
         onClose={() => setShowPicker(false)}
       />
+
+      <Modal
+        visible={historyFor != null}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setHistoryFor(null)}
+      >
+        <SafeAreaProvider>
+          <SafeAreaView style={s.modalSafe} edges={['top', 'bottom']}>
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle} numberOfLines={1}>{historyFor?.name}</Text>
+              <TouchableOpacity style={s.iconBtn} onPress={() => setHistoryFor(null)}>
+                <Ionicons name="close" size={22} color={COLORS.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={{ padding: 16 }}>
+              {historyFor && <ExerciseHistoryList exerciseId={historyFor.exerciseId} />}
+            </ScrollView>
+          </SafeAreaView>
+        </SafeAreaProvider>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    backgroundColor: COLORS.surface,
     gap: 10,
   },
-  sessionName: { color: COLORS.text, fontWeight: '700', fontSize: 16 },
-  timer: { color: COLORS.accent, fontSize: 13, marginTop: 1, fontVariant: ['tabular-nums'] },
-  progress: {
+  iconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: COLORS.surface2,
-    borderRadius: RADIUS.full,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  progressText: { color: COLORS.textMuted, fontSize: 12, fontWeight: '500' },
-  headerBtns: { flexDirection: 'row', gap: 6, marginLeft: 'auto' },
-  cancelBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  cancelText: { color: COLORS.textMuted, fontSize: 13 },
+  headerCenter: { flex: 1 },
+  sessionName: { color: COLORS.text, fontWeight: '800', fontSize: 17 },
+  timer: { color: COLORS.textMuted, fontSize: 13, marginTop: 1, fontVariant: ['tabular-nums'] },
   finishBtn: {
     backgroundColor: COLORS.green,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: RADIUS.md,
-    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: RADIUS.full,
+    minWidth: 84,
     alignItems: 'center',
-    gap: 4,
   },
-  finishText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  finishText: { color: '#06281d', fontSize: 14, fontWeight: '800' },
+  progressTrack: { height: 3, backgroundColor: COLORS.surface2 },
+  progressFill: { height: 3, backgroundColor: COLORS.green },
 
-  content: { padding: 12, paddingBottom: 24 },
+  content: { padding: 12, paddingBottom: 40 },
 
-  emptyWrap: { alignItems: 'center', paddingVertical: 64 },
-  emptyIcon: { fontSize: 56, marginBottom: 12 },
-  emptyTitle: { color: COLORS.text, fontWeight: '600', fontSize: 17 },
-  emptyHint: { color: COLORS.textMuted, fontSize: 13, marginTop: 6 },
+  emptyWrap: { alignItems: 'center', paddingVertical: 56, gap: 6 },
+  emptyTitle: { color: COLORS.text, fontWeight: '700', fontSize: 17, marginTop: 6 },
+  emptyHint: { color: COLORS.textMuted, fontSize: 13 },
 
   exCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 12,
-    marginBottom: 10,
+    borderRadius: RADIUS.lg,
+    padding: 14,
+    marginBottom: 12,
   },
-  exCardActive: { borderColor: COLORS.accent, borderWidth: 1.5 },
-  exCardDone: { opacity: 0.55 },
-
-  exHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
-  exHeaderLeft: { flex: 1 },
-  exHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  exName: { color: COLORS.text, fontWeight: '700', fontSize: 15 },
-  exMeta: { color: COLORS.textMuted, fontSize: 12, marginTop: 2 },
-  doneBadge: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  doneBadgeText: { color: COLORS.green, fontSize: 12, fontWeight: '600' },
-
-  prevWrap: {
+  exCardDone: { borderWidth: 1, borderColor: COLORS.green + '55' },
+  exHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginBottom: 10 },
+  exName: { color: COLORS.accent, fontWeight: '800', fontSize: 16 },
+  exMeta: { color: COLORS.textMuted, fontSize: 12, marginTop: 3 },
+  smallIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: COLORS.surface2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  tableHead: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4, marginBottom: 4 },
+  th: { color: COLORS.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.5, textAlign: 'center' },
+  cSet: { width: 34, alignItems: 'center' },
+  cPrev: { flex: 1.3, alignItems: 'center' },
+  cIn: { flex: 1, marginHorizontal: 4 },
+  cCheck: { width: 44, alignItems: 'center' },
+
+  setRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5,
+    paddingHorizontal: 4,
     borderRadius: RADIUS.sm,
-    padding: 8,
-    marginBottom: 8,
   },
-  prevLabel: {
-    color: COLORS.textMuted,
-    fontSize: 10,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 3,
-  },
-  prevData: { color: COLORS.text, fontSize: 12, lineHeight: 18 },
-
-  setsTable: { marginBottom: 8 },
-  setsHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingBottom: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    marginBottom: 2,
-  },
-  setRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4 },
-  col: { color: COLORS.textMuted, fontSize: 11, fontWeight: '500' },
-  colSet: { width: 36 },
-  colVal: { width: 56 },
-  setTxt: { color: COLORS.text, fontSize: 13 },
-
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 8,
-  },
-  setInput: {
+  setRowDone: { backgroundColor: COLORS.greenDim },
+  setNum: { color: COLORS.text, fontWeight: '700', fontSize: 15, textAlign: 'center' },
+  setNumDone: { color: COLORS.green },
+  prevText: { color: COLORS.textMuted, fontSize: 13, textAlign: 'center' },
+  input: {
     backgroundColor: COLORS.surface2,
-    borderWidth: 1,
-    borderColor: COLORS.border,
     borderRadius: RADIUS.sm,
     color: COLORS.text,
-    fontSize: 15,
-    fontWeight: '600',
-    padding: 8,
+    fontSize: 16,
+    fontWeight: '700',
+    paddingVertical: Platform.OS === 'ios' ? 9 : 6,
     textAlign: 'center',
-    width: 58,
   },
-  inputSep: { color: COLORS.textMuted, fontSize: 12 },
-  logBtn: {
-    flex: 1,
-    backgroundColor: COLORS.accent,
+  inputDone: { backgroundColor: 'transparent' },
+  checkBtn: {
+    height: 36,
     borderRadius: RADIUS.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
+    backgroundColor: COLORS.surface2,
     justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 10,
   },
-  logBtnText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  checkBtnDone: { backgroundColor: COLORS.green },
 
-  markDoneBtn: {
+  addSetBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    marginTop: 8,
+    paddingVertical: 9,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.surface2,
   },
-  markDoneText: { color: COLORS.green, fontSize: 13, fontWeight: '500' },
+  addSetText: { color: COLORS.text, fontWeight: '600', fontSize: 13 },
 
   addExBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.accentDim,
     borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderStyle: 'dashed',
-    padding: 14,
+    padding: 15,
     marginTop: 4,
   },
-  addExText: { color: COLORS.accent, fontWeight: '600', fontSize: 15 },
+  addExText: { color: COLORS.accent, fontWeight: '700', fontSize: 15 },
+  discardBtn: { alignItems: 'center', padding: 18, marginTop: 8 },
+  discardText: { color: COLORS.danger, fontWeight: '600', fontSize: 14 },
 
-  // Rest timer bar
   restBar: {
     backgroundColor: COLORS.surface,
     borderTopWidth: 1,
-    borderTopColor: COLORS.green + '55',
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 12,
+    borderTopColor: COLORS.border,
+  },
+  restTrack: { height: 3, backgroundColor: COLORS.surface2 },
+  restFill: { height: 3, backgroundColor: COLORS.accent },
+  restRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 10,
   },
-  restInfo: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  restLabel: { color: COLORS.textMuted, fontSize: 13 },
-  restCountdown: {
-    color: COLORS.green,
-    fontSize: 20,
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
-    minWidth: 36,
-  },
-  restCountdownUrgent: { color: COLORS.danger },
-  restTrack: {
-    flex: 1,
-    height: 4,
-    backgroundColor: COLORS.border,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  restFill: { height: '100%', borderRadius: 2 },
-  skipBtn: {
+  restAdj: {
     backgroundColor: COLORS.surface2,
     borderRadius: RADIUS.full,
     paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    paddingVertical: 7,
   },
-  skipText: { color: COLORS.textMuted, fontSize: 12, fontWeight: '500' },
+  restAdjText: { color: COLORS.text, fontWeight: '700', fontSize: 13 },
+  restCenter: { flex: 1, alignItems: 'center' },
+  restLabel: { color: COLORS.textMuted, fontSize: 11, fontWeight: '600' },
+  restTime: { color: COLORS.text, fontSize: 22, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  skipBtn: {
+    backgroundColor: COLORS.accent,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  skipText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+
+  modalSafe: { flex: 1, backgroundColor: COLORS.bg },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  modalTitle: { flex: 1, color: COLORS.text, fontWeight: '800', fontSize: 18 },
 });

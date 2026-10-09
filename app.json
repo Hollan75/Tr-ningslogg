@@ -20,6 +20,11 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.hollan75.traningslogg"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e32a2664-5393-4229-9724-eeb9cd6981a3"
+      }
     }
   }
 }

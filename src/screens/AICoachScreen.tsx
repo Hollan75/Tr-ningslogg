@@ -30,6 +30,17 @@ interface Message {
 
 type SessionWithSets = WorkoutSession & { sets: SessionSet[] };
 
+// "Bänkpress: 60kg×10, 60kg×8" per exercise so the coach can reason about progression
+function summarizeSets(sets: SessionSet[]): string[] {
+  const byExercise = new Map<string, string[]>();
+  for (const set of sets) {
+    const name = set.exercise_name ?? set.exercise_id;
+    const entry = set.weight_kg ? `${set.weight_kg}kg×${set.reps ?? '?'}` : `${set.reps ?? '?'} reps`;
+    byExercise.set(name, [...(byExercise.get(name) ?? []), entry]);
+  }
+  return [...byExercise.entries()].map(([name, list]) => `${name}: ${list.join(', ')}`);
+}
+
 function buildSystemPrompt(profileKey: string, history: SessionWithSets[]): string {
   const profile = PROFILES[profileKey];
 
@@ -40,7 +51,7 @@ function buildSystemPrompt(profileKey: string, history: SessionWithSets[]): stri
           history.map(s => ({
             datum: s.started_at.slice(0, 10),
             pass: s.template_name ?? 'Fritt pass',
-            övningar: [...new Set(s.sets.map(set => set.exercise_name))].filter(Boolean),
+            övningar: summarizeSets(s.sets),
             totalSet: s.sets.length,
             varaktighet: s.completed_at
               ? `${Math.round(

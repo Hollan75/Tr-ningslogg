@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
 import { COLORS, RADIUS } from '../theme';
 import {
@@ -27,6 +27,7 @@ import { loadLocalExercises } from '../data/localExercises';
 type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
 
 export default function SettingsScreen() {
+  const navigation = useNavigation();
   const [exerciseCount, setExerciseCount] = useState(0);
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
@@ -69,7 +70,7 @@ export default function SettingsScreen() {
   function handleClearAll() {
     Alert.alert(
       'Rensa all data',
-      'Detta tar bort alla träningspass, mallar och övningar. Kan inte ångras.',
+      'Detta tar bort alla träningspass, sparade pass och egna övningar. Kan inte ångras.',
       [
         { text: 'Avbryt', style: 'cancel' },
         {
@@ -77,6 +78,9 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             await clearAllData();
+            // Restore the built-in exercise library so the app stays usable
+            await insertExercisesBatch(loadLocalExercises());
+            await setSetting('exercises_synced', 'true');
             await loadInfo();
             Alert.alert('Klart', 'All data har rensats.');
           },
@@ -99,7 +103,12 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <ScrollView contentContainerStyle={s.content}>
-        <Text style={s.title}>Inställningar</Text>
+        <View style={s.topRow}>
+          <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()} hitSlop={8}>
+            <Ionicons name="chevron-back" size={22} color={COLORS.text} />
+          </TouchableOpacity>
+          <Text style={s.title}>Inställningar</Text>
+        </View>
 
         {/* Exercise sync section */}
         <Text style={s.sectionLabel}>ÖVNINGAR</Text>
@@ -186,7 +195,16 @@ export default function SettingsScreen() {
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
   content: { padding: 16, paddingBottom: 48 },
-  title: { fontSize: 26, fontWeight: '700', color: COLORS.text, letterSpacing: -0.5, marginBottom: 20 },
+  topRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: COLORS.surface2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: { fontSize: 26, fontWeight: '800', color: COLORS.text, letterSpacing: -0.5 },
   sectionLabel: {
     fontSize: 11,
     fontWeight: '600',

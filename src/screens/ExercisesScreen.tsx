@@ -8,10 +8,6 @@ import {
   StyleSheet,
   ActivityIndicator,
   ScrollView,
-  Modal,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,20 +15,13 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { COLORS, RADIUS } from '../theme';
-import { getExercises, getBodyParts, getEquipment, insertExercise } from '../database';
+import { getExercises, getBodyParts, getEquipment } from '../database';
+import ExerciseFormModal from '../components/ExerciseFormModal';
+import { parseMuscles } from '../utils/format';
 import type { Exercise } from '../types';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
-
-function parseMuscles(json: string | null): string[] {
-  try {
-    const arr = JSON.parse(json ?? '[]');
-    return Array.isArray(arr) ? arr : [];
-  } catch {
-    return [];
-  }
-}
 
 export default function ExercisesScreen() {
   const navigation = useNavigation<Nav>();
@@ -44,6 +33,8 @@ export default function ExercisesScreen() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [onlyCustom, setOnlyCustom] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
@@ -51,45 +42,20 @@ export default function ExercisesScreen() {
         setBodyParts(bp);
         setEquipments(eq);
       });
+      // Reload list when returning (an exercise may have been edited or deleted)
+      setReloadKey(k => k + 1);
     }, [])
   );
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setLoading(true);
-      getExercises(search || undefined, bodyPart ?? undefined, equip ?? undefined)
+      getExercises(search || undefined, bodyPart ?? undefined, equip ?? undefined, onlyCustom)
         .then(setExercises)
         .finally(() => setLoading(false));
     }, 250);
     return () => clearTimeout(timer);
-  }, [search, bodyPart, equip]);
-
-  async function handleCreateExercise(name: string, bp: string, eq: string, instr: string) {
-    const id = `custom_${Date.now()}`;
-    const muscles = bp.trim() ? [bp.trim()] : [];
-    const exercise: Exercise = {
-      id,
-      name: name.trim(),
-      category: 'custom',
-      primaryMuscles: JSON.stringify(muscles),
-      secondaryMuscles: '[]',
-      equipment: eq.trim() || null,
-      bodyPart: muscles[0] ?? null,
-      gifUrl: null,
-      instructions: instr.trim() || null,
-      difficulty: null,
-    };
-    await insertExercise(exercise);
-    // Refresh filter lists and exercise list
-    const [bp2, eq2] = await Promise.all([getBodyParts(), getEquipment()]);
-    setBodyParts(bp2);
-    setEquipments(eq2);
-    setLoading(true);
-    getExercises(search || undefined, bodyPart ?? undefined, equip ?? undefined)
-      .then(setExercises)
-      .finally(() => setLoading(false));
-    setShowCreateModal(false);
-  }
+  }, [search, bodyPart, equip, onlyCustom, reloadKey]);
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -121,6 +87,23 @@ export default function ExercisesScreen() {
 
       {/* Filters */}
       <View style={s.filtersWrap}>
+        <View style={s.filterRow}>
+          <Text style={s.filterLabel}>Visa</Text>
+          <View style={s.chipsRow}>
+            <TouchableOpacity
+              style={[s.chip, !onlyCustom && s.chipActive]}
+              onPress={() => setOnlyCustom(false)}
+            >
+              <Text style={[s.chipText, !onlyCustom && s.chipTextActive]}>Alla</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.chip, onlyCustom && s.chipActive]}
+              onPress={() => setOnlyCustom(true)}
+            >
+              <Text style={[s.chipText, onlyCustom && s.chipTextActive]}>Mina övningar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
         {bodyParts.length > 0 && (
           <FilterRow
             items={bodyParts}
@@ -153,9 +136,11 @@ export default function ExercisesScreen() {
       ) : exercises.length === 0 ? (
         <View style={s.center}>
           <Text style={s.empty}>
-            {search || bodyPart || equip
+            {onlyCustom && !search && !bodyPart && !equip
+              ? 'Du har inga egna övningar än – tryck "Ny övning" för att skapa en.'
+              : search || bodyPart || equip
               ? 'Inga träffar – prova andra filter'
-              : 'Inga övningar – synka i Inställningar'}
+              : 'Inga övningar – ladda om dem i Inställningar'}
           </Text>
         </View>
       ) : (
@@ -175,10 +160,14 @@ export default function ExercisesScreen() {
       )}
 
       {/* Create exercise modal */}
-      <CreateExerciseModal
+      <ExerciseFormModal
         visible={showCreateModal}
+        initialName={search.trim()}
         onClose={() => setShowCreateModal(false)}
-        onCreate={handleCreateExercise}
+        onSaved={ex => {
+          setShowCreateModal(false);
+          navigation.navigate('ExerciseDetail', { exerciseId: ex.id });
+        }}
       />
     </SafeAreaView>
   );
@@ -255,114 +244,6 @@ function ExerciseRow({ exercise, onPress }: { exercise: Exercise; onPress: () =>
       </View>
       <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
     </TouchableOpacity>
-  );
-}
-
-// ─── Create exercise modal ────────────────────────────────────────────────────
-
-function CreateExerciseModal({
-  visible,
-  onClose,
-  onCreate,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  onCreate: (name: string, bodyPart: string, equipment: string, instructions: string) => Promise<void>;
-}) {
-  const [name, setName] = useState('');
-  const [bp, setBp] = useState('');
-  const [eq, setEq] = useState('');
-  const [instr, setInstr] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  function reset() {
-    setName(''); setBp(''); setEq(''); setInstr('');
-  }
-
-  async function handleSave() {
-    if (!name.trim()) {
-      Alert.alert('Namn krävs', 'Ange ett namn för övningen.');
-      return;
-    }
-    setSaving(true);
-    try {
-      await onCreate(name, bp, eq, instr);
-      reset();
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function handleClose() {
-    reset();
-    onClose();
-  }
-
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
-      <KeyboardAvoidingView style={m.wrap} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <SafeAreaView style={m.safe} edges={['top', 'bottom']}>
-          {/* Header */}
-          <View style={m.header}>
-            <TouchableOpacity onPress={handleClose}>
-              <Text style={m.cancel}>Avbryt</Text>
-            </TouchableOpacity>
-            <Text style={m.title}>Ny övning</Text>
-            <TouchableOpacity onPress={handleSave} disabled={saving}>
-              {saving
-                ? <ActivityIndicator size="small" color={COLORS.accent} />
-                : <Text style={m.save}>Spara</Text>
-              }
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView contentContainerStyle={m.content} keyboardShouldPersistTaps="handled">
-            <Field label="Namn *" placeholder="t.ex. Hantelcurl" value={name} onChangeText={setName} />
-            <Field label="Muskelgrupp" placeholder="t.ex. biceps" value={bp} onChangeText={setBp} />
-            <Field label="Utrustning" placeholder="t.ex. hantel" value={eq} onChangeText={setEq} />
-            <Field
-              label="Instruktioner (valfritt)"
-              placeholder="Beskriv hur övningen utförs…"
-              value={instr}
-              onChangeText={setInstr}
-              multiline
-              style={m.instrInput}
-            />
-          </ScrollView>
-        </SafeAreaView>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
-
-function Field({
-  label,
-  placeholder,
-  value,
-  onChangeText,
-  multiline,
-  style: extraStyle,
-}: {
-  label: string;
-  placeholder: string;
-  value: string;
-  onChangeText: (v: string) => void;
-  multiline?: boolean;
-  style?: object;
-}) {
-  return (
-    <View style={m.field}>
-      <Text style={m.label}>{label}</Text>
-      <TextInput
-        style={[m.input, extraStyle]}
-        placeholder={placeholder}
-        placeholderTextColor={COLORS.textMuted}
-        value={value}
-        onChangeText={onChangeText}
-        multiline={multiline}
-        autoCorrect={false}
-      />
-    </View>
   );
 }
 
@@ -491,35 +372,4 @@ const s = StyleSheet.create({
     borderColor: COLORS.border,
   },
   equipChipText: { color: COLORS.textMuted, fontSize: 11 },
-});
-
-const m = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: COLORS.bg },
-  safe: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  title: { fontSize: 17, fontWeight: '600', color: COLORS.text },
-  cancel: { fontSize: 16, color: COLORS.textMuted },
-  save: { fontSize: 16, fontWeight: '600', color: COLORS.accent },
-  content: { padding: 16, gap: 16 },
-  field: { gap: 6 },
-  label: { color: COLORS.textMuted, fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  input: {
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    color: COLORS.text,
-    fontSize: 15,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-  },
-  instrInput: { minHeight: 100, textAlignVertical: 'top' },
 });

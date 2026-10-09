@@ -16,6 +16,8 @@ export interface WorkoutTemplate {
   name: string;
   created_at: string;
   exercise_count?: number;
+  exercise_names?: string | null;
+  last_used?: string | null;
 }
 
 export interface TemplateExercise {
