@@ -150,6 +150,22 @@ section.panel { display: grid; gap: 20px; padding-top: 22px; }
 .item .t { font-family: var(--f-mono); color: var(--muted); font-size: .85rem; padding-top: 2px; }
 pre.ics { white-space: pre-wrap; word-break: break-all; font-family: var(--f-mono); font-size: .75rem; background: var(--surface-2); padding: 10px; border-radius: 8px; max-height: 200px; overflow: auto; }
 
+/* Livepriser */
+#planOut { display: grid; gap: 24px; }
+.livebox { display: grid; gap: 10px; }
+.livebox:empty { display: none; }
+.srcline { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--good); margin-right: 6px; vertical-align: middle; }
+.score { font-family: var(--f-mono); font-weight: 600; font-size: .85rem; background: var(--surface-2); border-radius: 6px; padding: 1px 6px; }
+.combo { display: grid; grid-template-columns: 1fr auto auto; gap: 6px 12px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); font-size: .92rem; }
+.combo:first-child { border-top: 0; }
+.combo.current { font-weight: 600; }
+details.more > summary { cursor: pointer; color: var(--sky); font-weight: 600; padding: 4px 0; }
+details.more[open] > summary { margin-bottom: 8px; }
+.row-flight { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 12px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); font-size: .9rem; }
+.row-flight:first-child { border-top: 0; }
+.chatlive { display: grid; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: .88rem; }
+.chatlive .r { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: baseline; }
 /* Assistent */
 .chatgrid { display: grid; gap: 20px; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); align-items: start; }
 @media (max-width: 860px) { .chatgrid { grid-template-columns: 1fr; } }
@@ -238,7 +254,7 @@ pre.ics { white-space: pre-wrap; word-break: break-all; font-family: var(--f-mon
 
   <!-- PLANERA -->
   <section class="panel" id="panel-plan" data-panel="plan" hidden>
-    <p class="intro">Ange resmål och datum. Bokningslänkarna nedan fylls i direkt. Tryck på <b>Hitta resa</b> så tar Claude fram flygalternativ, områden att bo i, evenemang som matchar dina intressen och billigare datum i närheten.</p>
+    <p class="intro">Ange resmål och datum. Tryck på <b>Hitta resa</b> så hämtas livepriser på flyg från Kiwi.com och boenden från Booking.com utifrån din profil. Samtidigt tar Claude fram områden att bo i och evenemang som matchar dina intressen.</p>
     <form class="form" id="planForm" autocomplete="off">
       <div class="row">
         <div class="field"><label class="label" for="pDest">Resmål</label><input id="pDest" placeholder="t.ex. Barcelona eller BCN" required></div>
@@ -319,6 +335,7 @@ pre.ics { white-space: pre-wrap; word-break: break-all; font-family: var(--f-mon
         <div class="field"><label class="label" for="fAlt">Alternativa flygplatser</label><input id="fAlt" class="mono" placeholder="BMA, NYO, CPH"></div>
         <div class="field"><label class="label" for="fAdults">Vuxna</label><input id="fAdults" type="number" min="1" max="9"></div>
         <div class="field"><label class="label" for="fChildren">Barn</label><input id="fChildren" type="number" min="0" max="9"></div>
+        <div class="field"><label class="label" for="fChildAges">Barnens åldrar</label><input id="fChildAges" placeholder="t.ex. 6, 9" inputmode="numeric"></div>
       </div>
       <div class="row">
         <div class="field"><label class="label" for="fBudget">Budget per resa (kr, totalt)</label><input id="fBudget" type="number" min="0" step="500"></div>
@@ -466,7 +483,7 @@ function bridgeSuggestions() {
 /* ---------- Tillstånd & lagring ---------- */
 const DEFAULT_INTERESTS = ["Löpning & lopp", "Fotboll", "Formel 1", "Konserter", "Festivaler", "Mat & vin", "Design & arkitektur", "Konst & museer", "Surf & strand", "Vandring", "Skidåkning", "Julmarknader"];
 const DEFAULT_PROFILE = {
-  home: "ARN", alt: "", adults: 1, children: 0, budget: 15000, stops: "1", time: "any", bag: "handbagage",
+  home: "ARN", alt: "", adults: 1, children: 0, childAges: "", budget: 15000, stops: "1", time: "any", bag: "handbagage",
   stay: "hotell", stars: "3", area: "centralt", loyalty: "", interests: ["Löpning & lopp", "Mat & vin", "Konserter"],
   customInterests: [], pace: "lagom", diet: "", notes: "", memories: [],
 };
@@ -556,7 +573,7 @@ function profileText() {
   const p = state.profile;
   return [
     `Hemflygplats: ${p.home || "ARN"}${p.alt ? ` (alternativ: ${p.alt})` : ""}`,
-    `Resenärer: ${p.adults} vuxna, ${p.children} barn`,
+    `Resenärer: ${p.adults} vuxna, ${p.children} barn${p.childAges ? ` (${p.childAges} år)` : ""}`,
     `Budget per resa totalt: ${p.budget} SEK`,
     `Byten: ${p.stops === "0" ? "bara direktflyg" : p.stops === "1" ? "max 1 byte" : "spelar ingen roll"}`,
     `Föredragen avgångstid: ${p.time}`, `Bagage: ${p.bag}`,
@@ -659,6 +676,7 @@ Svara ENDAST med JSON i exakt denna form (svenska texter):
 {
  "destinationIata": "BCN",
  "city": "Barcelona",
+ "cityEnglish": "Barcelona, Spain",
  "country": "Spanien",
  "summary": "2-3 meningar om resan och perioden",
  "weather": "typiskt väder under perioden, temperaturer",
@@ -677,21 +695,320 @@ async function runPlan(ev) {
   const i = readPlanInput();
   if (!(i.dest && validIso(i.from) && validIso(i.to) && i.to > i.from)) { toast("Ange resmål och en hemresa efter utresan."); return; }
   const out = $("#planOut");
-  const sample = await getSample();
-  if (!sample) { out.replaceChildren(errorEl("Claude är inte tillgängligt i den här vyn. Använd bokningslänkarna ovan.")); return; }
   planCtl?.abort(); planCtl = new AbortController();
+  const ctl = planCtl;
   busy($("#planBtn"), $("#planStop"), true);
-  out.replaceChildren(statusEl(`Claude letar flyg, boende och evenemang i ${i.dest}. Det tar oftast 20–60 sekunder.`));
+  state.plan = null; state.planInput = i; state.dayplan = null; state.live = { flights: null, hotels: null };
+  const fBox = h("div", { class: "livebox" }), hBox = h("div", { class: "livebox" }), aiBox = h("div", { style: "display:grid;gap:20px" });
+  out.replaceChildren(
+    h("div", { class: "sechead" }, h("h2", null, i.dest), h("span", { class: "small muted" }, `${fmtRange(i.from, i.to)} · ${daysBetween(i.from, i.to)} nätter`)),
+    fBox, hBox, aiBox);
+  const current = () => planCtl === ctl;
+  const dest = /^[A-Za-z]{3}$/.test(i.dest) ? i.dest.toUpperCase() : i.dest;
+  const flightsTask = loadLiveFlights(fBox, { dest, from: i.from, to: i.to, flex: i.flex }, current);
+  const hotelsTask = loadLiveHotels(hBox, { dest: i.dest, from: i.from, to: i.to }, current);
+  const aiTask = (async () => {
+    const sample = await getSample();
+    if (!sample) { aiBox.replaceChildren(h("div", { class: "status" }, "Claude är inte tillgängligt i den här vyn, så evenemang och områdestips saknas.")); return null; }
+    aiBox.replaceChildren(statusEl(`Claude letar evenemang, områden och tips för ${i.dest}. Det tar oftast 20–60 sekunder.`));
+    try {
+      const plan = await sample.json(planPrompt(i), { signal: ctl.signal });
+      if (!plan || typeof plan !== "object" || !Array.isArray(plan.flights)) throw { code: "invalid_json" };
+      if (!current()) return null;
+      state.plan = plan;
+      renderPlan(plan, i, aiBox);
+      updatePlanLinks();
+      return plan;
+    } catch (e) {
+      if (current()) aiBox.replaceChildren(e?.code === "cancelled" ? "" : errorEl(errText(e)));
+      return null;
+    }
+  })();
+  const [fr, hr, plan] = await Promise.all([flightsTask, hotelsTask, aiTask]);
+  // Hittade connectorn inte resmålet på användarens stavning: försök igen med Claudes IATA-kod / engelska namn.
+  if (current() && plan) {
+    const retries = [];
+    if (!fr?.ok && plan.destinationIata && /^[A-Z]{3}$/i.test(plan.destinationIata) && plan.destinationIata.toUpperCase() !== dest)
+      retries.push(loadLiveFlights(fBox, { dest: plan.destinationIata.toUpperCase(), from: i.from, to: i.to, flex: i.flex }, current));
+    if (!hr?.ok && plan.cityEnglish && plan.cityEnglish !== i.dest)
+      retries.push(loadLiveHotels(hBox, { dest: String(plan.cityEnglish).slice(0, 100), from: i.from, to: i.to }, current));
+    await Promise.all(retries);
+    if (retries.length && current()) renderPlan(plan, i, aiBox);
+  }
+  if (current()) busy($("#planBtn"), $("#planStop"), false);
+}
+
+/* ---------- Livepriser via connectors ---------- */
+const KIWI = "Kiwi.com", BOOKING = "Booking.com";
+let mcpPromise = null;
+const getMcp = () => (mcpPromise ??= (window.claude?.use ? claude.use("mcp").catch(() => null) : Promise.resolve(null)));
+const dmy = s => { const [y, m, d] = s.split("-"); return `${d}/${m}/${y}`; };
+const hhmm = t => String(t || "").slice(11, 16);
+const dateOf = t => String(t || "").slice(0, 10);
+const durTxt = sec => { const m = Math.round((+sec || 0) / 60); return `${Math.floor(m / 60)} h ${pad(m % 60)} min`; };
+const safeUrl = u => (typeof u === "string" && /^https:\/\//.test(u) ? u : null);
+const clock = ms => new Date(ms).toLocaleString("sv-SE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+function parseAges(v) { return String(v || "").split(/[^0-9]+/).filter(Boolean).map(Number).filter(n => n >= 0 && n <= 17).slice(0, 8); }
+function payloadOf(r) { let p = r && "payload" in r ? r.payload : r; if (typeof p === "string") { try { p = JSON.parse(p); } catch {} } return p; }
+
+async function callConnector(server, tool, input, retried = false) {
+  const mcp = await getMcp();
+  if (!mcp) throw { code: "no_mcp" };
   try {
-    const plan = await sample.json(planPrompt(i), { signal: planCtl.signal });
-    if (!plan || typeof plan !== "object" || !Array.isArray(plan.flights)) throw { code: "invalid_json" };
-    state.plan = plan; state.planInput = i; state.dayplan = null;
-    renderPlan(plan, i, out);
-    updatePlanLinks();
+    return payloadOf(await mcp.callTool(server, tool, input, { cache: { staleTime: 120000, gcTime: 900000 } }));
   } catch (e) {
-    if (e?.code === "cancelled") out.replaceChildren();
-    else out.replaceChildren(errorEl(errText(e)));
-  } finally { busy($("#planBtn"), $("#planStop"), false); }
+    if (e?.retryable && !retried) {
+      await new Promise(r => setTimeout(r, Math.min(e.retryAfterMs || 1200 + Math.random() * 1200, 10000)));
+      return callConnector(server, tool, input, true);
+    }
+    throw e;
+  }
+}
+function connectorError(server, e, retry) {
+  const code = e?.code;
+  const retryBtn = label => retry && h("button", { class: "btn sm", type: "button", onclick: retry }, label);
+  let text, btn = null, soft = false;
+  if (["no_mcp", "not_granted", "capability_disabled", "capability_removed"].includes(code)) { text = `Livepriser från ${server} visas när sidan är öppen i Claude.`; soft = true; }
+  else if (code === "server_not_connected" || code === "server_not_found") text = `Anslut ${server} i claude.ai under Inställningar → Connectors för att se livepriser.`;
+  else if (code === "needs_reauth") text = `Anslut ${server} på nytt i claude.ai under Inställningar → Connectors.`;
+  else if (code === "selection_required") { text = `Du har flera ${server}-connectors. Välj vilken sidan ska använda och försök igen.`; btn = retryBtn("Försök igen"); }
+  else if (code === "not_in_manifest") {
+    text = `${server} är inte tillåtet för den här sidan.`;
+    btn = h("button", { class: "btn sm", type: "button", onclick: async () => { try { const pm = await claude.use("permissions"); await pm?.manage(); } catch {} } }, "Öppna behörigheter");
+  }
+  else if (code === "approval_required") { text = `${server} behöver ditt godkännande innan sidan kan söka.`; btn = retryBtn("Godkänn och sök"); }
+  else if (code === "blocked_by_policy") text = `${server} är blockerat av din organisations inställningar.`;
+  else if (code === "tool_error") { text = `${server} kunde inte genomföra sökningen. ${String(e.message || "").slice(0, 160)}`; btn = retryBtn("Försök igen"); }
+  else { text = `${server} svarar inte just nu.`; btn = retryBtn("Försök igen"); }
+  return h("div", { class: soft ? "status" : "status err" }, h("span", { style: "flex:1" }, text), btn);
+}
+
+/* Flyg (Kiwi.com) */
+function kiwiInput({ dest, from, to, flex }, sort) {
+  const p = state.profile, adults = Math.max(1, +p.adults || 1), kids = Math.max(0, +p.children || 0);
+  const inp = { flyFrom: (p.home || "ARN").toUpperCase(), flyTo: dest, departureDate: dmy(from), returnDate: dmy(to), adults, children: kids, currency: "SEK", locale: "sv", sort };
+  const f = Math.min(Math.max(0, +flex || 0), 3);
+  if (f) { inp.departureDateFlexDays = f; inp.returnDateFlexDays = f; }
+  if (p.stops === "0") inp.max_sector_stopovers = 0; else if (p.stops === "1") inp.max_sector_stopovers = 1;
+  if (p.bag === "incheckat") { inp.adults_hold_bags = Array(adults).fill(1); if (kids) inp.children_hold_bags = Array(kids).fill(1); }
+  else { inp.adults_hand_bags = Array(adults).fill(1); if (kids) inp.children_hand_bags = Array(kids).fill(1); }
+  return inp;
+}
+function normLeg(l) {
+  if (!l || typeof l !== "object") return null;
+  const segs = Array.isArray(l.segments) ? l.segments : [];
+  return { route: Array.isArray(l.route) ? l.route.map(String) : [l.from, l.to].filter(Boolean), dep: String(l.departureTime || ""), arr: String(l.arrivalTime || ""), dur: +l.durationSeconds || 0,
+    stops: Number.isFinite(+l.stops) ? +l.stops : Math.max(0, segs.length - 1), carriers: [...new Set(segs.map(s => s.carrierName || s.carrier).filter(Boolean).map(String))] };
+}
+function normItin(x) {
+  const b = x.baggage && typeof x.baggage === "object" ? { personalItem: +x.baggage.personalItem || 0, cabinBag: +x.baggage.cabinBag || 0, checkedBag: +x.baggage.checkedBag || 0 } : null;
+  return { id: String(x.id || uid()), price: +x.price, total: +x.totalDurationSeconds || 0, url: safeUrl(x.bookingUrl), bags: b, out: normLeg(x.outbound), back: normLeg(x.inbound) };
+}
+async function kiwiSearch(q) {
+  const res = await Promise.allSettled(["price", "duration"].map(s => callConnector(KIWI, "search-flight", kiwiInput(q, s))));
+  const ok = res.filter(r => r.status === "fulfilled").map(r => r.value);
+  if (!ok.length) throw res[0].reason;
+  const seen = new Map();
+  for (const p of ok) for (const x of (p && Array.isArray(p.itineraries) ? p.itineraries : [])) {
+    const n = normItin(x); if (Number.isFinite(n.price) && n.out && !seen.has(n.id)) seen.set(n.id, n);
+  }
+  const err = ok.find(p => p && p.error)?.error;
+  return { items: [...seen.values()], fetchedAt: Date.now(), query: q, note: err ? String(err).slice(0, 200) : "" };
+}
+function flightPicks(items) {
+  if (!items.length) return [];
+  const byPrice = [...items].sort((a, b) => a.price - b.price);
+  const byDur = [...items].sort((a, b) => a.total - b.total || a.price - b.price);
+  const value = x => x.price + (x.total / 3600) * 250; // restid värderas till 250 kr/timme
+  const best = [...items].sort((a, b) => value(a) - value(b))[0];
+  const win = { morgon: [5, 10], dag: [10, 16], "kväll": [16, 23] }[state.profile.time];
+  const inWin = win ? byPrice.find(x => { const hr = +hhmm(x.out?.dep).slice(0, 2); return hr >= win[0] && hr < win[1]; }) : null;
+  const picks = [];
+  const add = (label, x) => { if (!x) return; const hit = picks.find(p => p.x.id === x.id); hit ? hit.labels.push(label) : picks.push({ labels: [label], x }); };
+  add("Billigast", byPrice[0]); add("Snabbast", byDur[0]); add("Bäst värde", best); if (win) add(`Avgång ${state.profile.time}`, inWin);
+  return picks;
+}
+function dateCombos(items) {
+  const m = new Map();
+  for (const x of items) {
+    const k = dateOf(x.out?.dep) + "|" + dateOf(x.back?.dep);
+    if (!m.has(k) || m.get(k).price > x.price) m.set(k, x);
+  }
+  return [...m.entries()].map(([k, x]) => ({ from: k.split("|")[0], to: k.split("|")[1], x })).filter(c => validIso(c.from) && validIso(c.to)).sort((a, b) => a.x.price - b.x.price);
+}
+const bagText = b => !b ? "" : (b.personalItem || b.cabinBag || b.checkedBag)
+  ? "Ingår: " + [b.personalItem && `${b.personalItem} personlig väska`, b.cabinBag && `${b.cabinBag} handbagage`, b.checkedBag && `${b.checkedBag} incheckad väska`].filter(Boolean).join(", ")
+  : "Inget bagage ingår";
+const paxLabel = () => { const n = (+state.profile.adults || 1) + (+state.profile.children || 0); return n > 1 ? `totalt, ${n} resenärer` : "tur och retur"; };
+function legLine(label, l) {
+  if (!l) return null;
+  const plus = dateOf(l.arr) && dateOf(l.arr) !== dateOf(l.dep) ? " (+1)" : "";
+  return h("div", { class: "small" }, h("span", { class: "label" }, label + " "),
+    `${validIso(dateOf(l.dep)) ? fmtDay(dateOf(l.dep)) : ""} ${hhmm(l.dep)}–${hhmm(l.arr)}${plus} · ${l.route.join(" → ")} · ${durTxt(l.dur)} · ${l.stops ? l.stops + " byte" : "direkt"}${l.carriers.length ? " · " + l.carriers.join(", ") : ""}`);
+}
+function flightCard(labels, x) {
+  return h("div", { class: "strip" },
+    h("div", { class: "stub" }, h("span", { class: "label" }, labels.join(" · ")), h("span", { class: "big price" }, kr(x.price)), h("span", { class: "small muted" }, paxLabel())),
+    h("div", { class: "body" }, legLine("Ut", x.out), legLine("Hem", x.back),
+      x.bags && h("div", { class: "small muted" }, bagText(x.bags)),
+      x.url && h("div", { class: "actions" }, ext(x.url, "Boka på Kiwi.com", "btn sm primary"))));
+}
+function renderLiveFlights(box, data, opts = {}) {
+  const items = data.items || [];
+  const q = data.query || {};
+  const head = h("div", { class: "sechead" }, h("h3", null, "Flyg"),
+    h("span", { class: "small muted srcline" }, h("span", null, h("span", { class: "live-dot", "aria-hidden": "true" }), opts.readonly ? `Pris ${clock(data.fetchedAt)}` : `Livepriser från Kiwi.com, hämtade ${clock(data.fetchedAt)}`), h("span", null, `${items.length} alternativ`)));
+  if (!items.length) {
+    const p = state.profile;
+    box.replaceChildren(head, h("div", { class: "empty" }, h("strong", null, "Inga flyg hittades"),
+      p.stops === "0" ? "Du har valt bara direktflyg. Det kanske inte finns direktflyg den här vägen. Ändra Byten i profilen och sök igen." : "Prova andra datum, flexibla datum eller en annan flygplats.", data.note || ""));
+    return;
+  }
+  const nodes = [head, h("div", { style: "display:grid;gap:10px" }, flightPicks(items).map(p => flightCard(p.labels, p.x)))];
+  const combos = dateCombos(items);
+  if (combos.length > 1 && q.from && q.to) {
+    const cur = combos.find(c => c.from === q.from && c.to === q.to);
+    nodes.push(h("div", { class: "card" }, h("strong", null, "Billigaste datum inom din flexibilitet"),
+      h("div", null, combos.slice(0, 6).map(c => {
+        const diff = cur ? cur.x.price - c.x.price : 0;
+        const isCur = cur && c === cur;
+        return h("div", { class: "combo" + (isCur ? " current" : "") },
+          h("span", null, fmtRange(c.from, c.to), isCur ? h("span", { class: "muted small" }, " (dina datum)") : null),
+          h("span", { class: "price" }, kr(c.x.price), diff > 0 ? h("span", { class: "small", style: "color:var(--good);margin-left:6px" }, `−${kr(diff)}`) : null),
+          !opts.readonly && !isCur ? h("button", { class: "btn sm", type: "button", onclick: () => { $("#pFrom").value = c.from; $("#pTo").value = c.to; updatePlanLinks(); runPlan(); } }, "Välj") : h("span"));
+      })),
+      !cur ? h("p", { class: "small muted" }, "Inga flyg hittades exakt på dina datum.") : null));
+  }
+  const rest = [...items].sort((a, b) => a.price - b.price);
+  nodes.push(h("details", { class: "more" }, h("summary", null, `Visa alla ${rest.length} alternativ`),
+    h("div", { class: "list" }, rest.map(x => h("div", { class: "row-flight" },
+      h("span", { class: "price" }, kr(x.price)),
+      h("span", { style: "min-width:0" }, `${fmtDay(dateOf(x.out.dep))} ${hhmm(x.out.dep)} ${x.out.route.join("→")}`, x.back ? h("span", { class: "muted" }, ` · hem ${fmtDay(dateOf(x.back.dep))} ${hhmm(x.back.dep)} ${x.back.route.join("→")}`) : null, h("span", { class: "muted" }, ` · ${durTxt(x.total)}`)),
+      x.url ? ext(x.url, "Boka", "small") : h("span"))))));
+  nodes.push(h("p", { class: "small muted", style: "max-width:75ch" }, "Kiwi.com kan kombinera flygbolag på separata biljetter. Läs villkoren för byten innan du bokar. Priserna kan ändras tills du har betalat."));
+  box.replaceChildren(...nodes);
+}
+async function loadLiveFlights(box, q, current) {
+  box.replaceChildren(statusEl(`Hämtar livepriser från Kiwi.com för ${(state.profile.home || "ARN").toUpperCase()} → ${q.dest}…`));
+  try {
+    const data = await kiwiSearch(q);
+    if (!current()) return { ok: false };
+    state.live = { ...(state.live || {}), flights: data };
+    renderLiveFlights(box, data);
+    return { ok: data.items.length > 0 };
+  } catch (e) {
+    if (current()) box.replaceChildren(h("h3", null, "Flyg"), connectorError(KIWI, e, () => loadLiveFlights(box, q, current)));
+    return { ok: false, error: e };
+  }
+}
+
+/* Boende (Booking.com) */
+const STAY_TYPE = { hotell: ["HOTEL"], boutique: ["HOTEL"], "lägenhet": ["APARTMENT", "HOLIDAY_HOME"], vandrarhem: ["HOSTEL"] };
+function bookingInput(dest, from, to) {
+  const p = state.profile;
+  const inp = { destination: dest, checkin_date: from, checkout_date: to, number_of_adults: Math.max(1, +p.adults || 1), number_of_rooms: 1, user_country_code: "se", user_locale: "sv", currency: "SEK" };
+  const ages = parseAges(p.childAges);
+  if (+p.children && ages.length) inp.children_ages = ages.slice(0, +p.children);
+  if (STAY_TYPE[p.stay]) inp.accommodation_types = STAY_TYPE[p.stay];
+  const st = +p.stars;
+  if (st >= 2 && ["hotell", "boutique"].includes(p.stay)) inp.star_rating = [2, 3, 4, 5].filter(n => n >= st);
+  const mem = [p.notes, ...(p.memories || []).map(m => m.text)].join(" ");
+  if (/gym|träna|träning|fitness/i.test(mem)) inp.facilities = ["FITNESS_CENTRE"];
+  inp.user_query = [`${p.stay === "lägenhet" ? "Apartment" : p.stay === "vandrarhem" ? "Hostel" : "Hotel"} in ${dest}`,
+    p.area === "centralt" && "central location within walking distance", p.area === "lugnt" && "quiet neighbourhood",
+    p.area === "nära stranden" && "close to the beach", inp.facilities && "with a gym"].filter(Boolean).join(", ");
+  return inp;
+}
+function normHotel(x) {
+  return { id: String(x.id ?? uid()), name: str(x.name, 120), url: safeUrl(x.url), total: +x.price?.book, cur: str(x.price?.currency, 3) || "SEK",
+    stars: +x.rating?.stars || 0, score: +x.rating?.review_score || 0, reviews: +x.rating?.number_of_reviews || 0,
+    district: str(x.location?.district_name, 60), city: str(x.location?.city_name, 60) };
+}
+async function bookingSearch(dest, from, to) {
+  const p = await callConnector(BOOKING, "accommodations_search", bookingInput(dest, from, to));
+  const list = p && Array.isArray(p.accommodations) ? p.accommodations : [];
+  return { items: list.map(normHotel).filter(x => x.name && Number.isFinite(x.total)), fetchedAt: Date.now(), query: { dest, from, to }, childrenMissing: +state.profile.children > 0 && !parseAges(state.profile.childAges).length };
+}
+let hotelSort = "rel";
+function hotelCard(x, nights) {
+  const hcom = `https://sv.hotels.com/Hotel-Search?destination=${encodeURIComponent(`${x.name}, ${x.city}`)}&startDate=${state.planInput?.from || ""}&endDate=${state.planInput?.to || ""}&adults=${state.profile.adults}&rooms=1`;
+  return h("div", { class: "card" },
+    h("div", { style: "display:flex;justify-content:space-between;gap:8px;align-items:baseline" }, h("strong", { style: "min-width:0" }, x.name), h("span", { class: "price" }, kr(x.total))),
+    h("div", { class: "small muted", style: "display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap" },
+      h("span", null, [x.district, x.stars ? "★".repeat(Math.min(5, x.stars)) : ""].filter(Boolean).join(" · ")),
+      h("span", null, nights ? `${kr(x.total / nights)}/natt` : "")),
+    x.score ? h("div", { class: "small" }, h("span", { class: "score" }, x.score.toLocaleString("sv-SE")), ` ${x.reviews.toLocaleString("sv-SE")} omdömen`) : null,
+    h("div", { class: "actions small" }, x.url && ext(x.url, "Boka på Booking.com", "btn sm primary"), state.planInput && ext(hcom, "Jämför på Hotels.com", "small")));
+}
+function renderLiveHotels(box, data, opts = {}) {
+  const q = data.query || {};
+  const nights = q.from && q.to ? daysBetween(q.from, q.to) : 0;
+  const sorters = { rel: null, price: (a, b) => a.total - b.total, score: (a, b) => b.score - a.score || a.total - b.total };
+  const items = sorters[hotelSort] ? [...data.items].sort(sorters[hotelSort]) : data.items;
+  const head = h("div", { class: "sechead" }, h("h3", null, "Boende"),
+    h("span", { class: "small muted srcline" }, h("span", null, h("span", { class: "live-dot", "aria-hidden": "true" }), opts.readonly ? `Pris ${clock(data.fetchedAt)}` : `Livepriser från Booking.com, hämtade ${clock(data.fetchedAt)}`), h("span", null, `totalpris för ${nights} nätter`)));
+  if (!items.length) { box.replaceChildren(head, h("div", { class: "empty" }, "Booking.com hittade inga lediga boenden som matchar din profil. Prova lägre standard eller annan boendetyp i profilen.")); return; }
+  const chips = !opts.readonly && h("div", { class: "chips" }, [["rel", "Bäst match"], ["price", "Lägst pris"], ["score", "Högst betyg"]].map(([k, l]) =>
+    h("button", { type: "button", class: "chip", "aria-pressed": String(hotelSort === k), onclick: () => { hotelSort = k; renderLiveHotels(box, data, opts); } }, l)));
+  const first = items.slice(0, 6), more = items.slice(6);
+  box.replaceChildren(head, chips || "",
+    data.childrenMissing ? h("p", { class: "small muted" }, "Priserna gäller bara vuxna. Lägg till barnens åldrar i profilen så räknas de med.") : "",
+    h("div", { class: "grid2" }, first.map(x => hotelCard(x, nights))),
+    more.length ? h("details", { class: "more" }, h("summary", null, `Visa ${more.length} till`), h("div", { class: "grid2" }, more.map(x => hotelCard(x, nights)))) : "");
+}
+async function loadLiveHotels(box, q, current) {
+  box.replaceChildren(statusEl(`Hämtar lediga boenden och priser från Booking.com i ${q.dest}…`));
+  try {
+    const data = await bookingSearch(q.dest, q.from, q.to);
+    if (!current()) return { ok: false };
+    state.live = { ...(state.live || {}), hotels: data };
+    renderLiveHotels(box, data);
+    return { ok: data.items.length > 0 };
+  } catch (e) {
+    if (current()) box.replaceChildren(h("h3", null, "Boende"), connectorError(BOOKING, e, () => loadLiveHotels(box, q, current)));
+    return { ok: false, error: e };
+  }
+}
+async function areaHotels(btn, slot, area, plan, i) {
+  btn.disabled = true;
+  slot.replaceChildren(statusEl("Hämtar från Booking.com…"));
+  const dest = `${area}, ${plan.cityEnglish || plan.city || i.dest}`.slice(0, 100);
+  try {
+    const data = await bookingSearch(dest, i.from, i.to);
+    const n = daysBetween(i.from, i.to);
+    slot.replaceChildren(data.items.length
+      ? h("div", { class: "klist" }, [...data.items].sort((a, b) => b.score - a.score || a.total - b.total).slice(0, 3).map(x => h("div", null,
+          h("span", { style: "min-width:0" }, x.name, h("span", { class: "muted small" }, x.score ? ` · ${x.score.toLocaleString("sv-SE")}` : "")),
+          h("span", { class: "actions" }, h("span", { class: "price small" }, `${kr(x.total / n)}/natt`), x.url && ext(x.url, "Boka", "small")))))
+      : h("p", { class: "small muted" }, "Inga lediga boenden i området som matchar profilen."));
+  } catch (e) { slot.replaceChildren(connectorError(BOOKING, e, () => areaHotels(btn, slot, area, plan, i))); }
+  finally { btn.disabled = false; }
+}
+
+/* Livepriser i assistenten */
+async function chatPrices(msg, q) {
+  msg.live = { status: "loading", dest: q.dest, from: q.from, to: q.to };
+  renderChat();
+  try {
+    const data = await kiwiSearch({ dest: /^[A-Za-z]{3}$/.test(q.dest) ? q.dest.toUpperCase() : q.dest, from: q.from, to: q.to, flex: 0 });
+    msg.live = { status: "ok", dest: q.dest, from: q.from, to: q.to, fetchedAt: data.fetchedAt, pax: paxLabel(),
+      picks: flightPicks(data.items).slice(0, 3).map(p => ({ labels: p.labels, x: p.x })) };
+  } catch (e) {
+    msg.live = { status: "error", dest: q.dest, from: q.from, to: q.to, code: e?.code || "upstream_error" };
+  }
+  persistChat(); renderChat();
+}
+function chatLiveEl(l) {
+  const title = h("div", { class: "r" }, h("strong", null, `Flyg till ${l.dest}`), h("span", { class: "muted" }, fmtRange(l.from, l.to)));
+  if (l.status === "loading") return h("div", { class: "chatlive" }, title, h("div", { class: "muted" }, h("span", { class: "spinner", style: "display:inline-block;vertical-align:middle;margin-right:6px", "aria-hidden": "true" }), "Hämtar livepriser från Kiwi.com…"));
+  if (l.status === "error") return h("div", { class: "chatlive" }, title, connectorError(KIWI, { code: l.code }));
+  if (!l.picks?.length) return h("div", { class: "chatlive" }, title, h("div", { class: "muted" }, "Inga flyg hittades de datumen."));
+  return h("div", { class: "chatlive" }, title,
+    l.picks.map(p => h("div", { class: "r" },
+      h("span", { style: "min-width:0" }, h("span", { class: "label" }, p.labels.join(" · ") + " "), `${hhmm(p.x.out?.dep)} ${p.x.out?.route?.join("→") || ""}, ${p.x.out?.stops ? p.x.out.stops + " byte" : "direkt"}`),
+      h("span", null, h("span", { class: "price" }, kr(p.x.price)), p.x.url ? [" ", ext(p.x.url, "Boka", "small")] : null))),
+    h("div", { class: "muted small" }, `${l.pax}. Kiwi.com, hämtat ${clock(l.fetchedAt)}.`),
+    h("div", { class: "actions" }, h("button", { class: "btn sm", type: "button", onclick: () => { openPlanner(l.dest, l.from, l.to); runPlan(); } }, "Se allt i planeraren")));
 }
 
 function certaintyTag(c) {
@@ -709,26 +1026,29 @@ function dateBox(s) {
 function renderPlan(plan, i, out, opts = {}) {
   const city = plan.city || i.dest;
   const nodes = [];
+  const live = opts.live || state.live || {};
+  const hasLiveFlights = live.flights?.items?.length > 0;
   nodes.push(h("div", { class: "sechead" },
-    h("h2", null, `${city}${plan.country ? ", " + plan.country : ""}`),
-    plan.estimateTotalSEK && h("span", { class: "price" }, "Uppskattat totalt " + krRange(plan.estimateTotalSEK))));
+    h("h3", null, `Om resan till ${city}${plan.country ? ", " + plan.country : ""}`),
+    plan.estimateTotalSEK && h("span", { class: "price small" }, "Claudes uppskattning totalt " + krRange(plan.estimateTotalSEK))));
   if (plan.summary) nodes.push(h("p", { style: "max-width:70ch" }, plan.summary));
   if (plan.weather) nodes.push(h("p", { class: "muted small" }, "Väder: " + plan.weather));
-  nodes.push(h("div", { class: "note" }, "Priser och evenemang är Claudes uppskattningar utifrån kunskap, inte livesökningar. Kontrollera alltid via länkarna innan du bokar."));
+  nodes.push(h("div", { class: "note" }, "Evenemang, områden och prisnivåer i det här avsnittet är Claudes bedömning utifrån kunskap, inte livesökningar. Livepriserna ovan kommer direkt från Kiwi.com och Booking.com."));
 
-  // Flyg
-  nodes.push(h("h3", null, "Flyg"));
-  nodes.push(h("div", { style: "display:grid;gap:10px" }, (plan.flights || []).map(f => h("div", { class: "strip" },
+  // Flyg (Claudes bedömning, hopfälld när livepriser finns)
+  const aiFlights = h("div", { style: "display:grid;gap:10px" }, (plan.flights || []).map(f => h("div", { class: "strip" },
     h("div", { class: "stub" }, h("span", { class: "label" }, f.label || "Alternativ"), h("span", { class: "big mono" }, f.route ? String(f.route).split(" ")[0] : "")),
     h("div", { class: "body" },
       h("div", { class: "top" }, h("strong", null, f.airlines || ""), h("span", { class: "price" }, krRange(f.priceSEK) + " / person")),
       h("div", { class: "small muted" }, [f.route, f.durationH && `${f.durationH} h`, f.stops === 0 ? "direkt" : f.stops != null ? `${f.stops} byte` : ""].filter(Boolean).join(" · ")),
       (f.outTime || f.homeTime) && h("div", { class: "small" }, `Ut: ${f.outTime || "–"} · Hem: ${f.homeTime || "–"}`),
-      f.why && h("div", { class: "small" }, f.why))))));
+      f.why && h("div", { class: "small" }, f.why)))));
+  if (hasLiveFlights) nodes.push(h("details", { class: "more" }, h("summary", null, "Claudes bedömning av flygalternativ"), aiFlights));
+  else nodes.push(h("h3", null, "Flyg, Claudes bedömning"), aiFlights);
 
   // Datumtips
   const flex = (plan.flex || []).filter(x => validIso(x.from) && validIso(x.to));
-  if (flex.length) {
+  if (flex.length && !hasLiveFlights) {
     nodes.push(h("h3", null, "Smartare datum"));
     nodes.push(h("div", { class: "grid2" }, flex.map(x => h("div", { class: "card" },
       h("div", { class: "top", style: "display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap" }, h("strong", null, fmtRange(x.from, x.to)), x.saveSEK ? h("span", { class: "price", style: "color:var(--good)" }, "Spara ca " + kr(x.saveSEK)) : null),
@@ -736,16 +1056,18 @@ function renderPlan(plan, i, out, opts = {}) {
       !opts.readonly && h("div", { class: "actions" }, h("button", { class: "btn sm", type: "button", onclick: () => { $("#pFrom").value = x.from; $("#pTo").value = x.to; updatePlanLinks(); toast("Datumen är uppdaterade"); } }, "Använd datumen"))))));
   }
 
-  // Boende
-  nodes.push(h("h3", null, "Boende"));
-  nodes.push(h("div", { class: "grid2" }, (plan.stays || []).map(s => h("div", { class: "card" },
+  // Områden
+  nodes.push(h("h3", null, "Var du ska bo"));
+  nodes.push(h("div", { class: "grid2" }, (plan.stays || []).map(s => { const slot = h("div"); return h("div", { class: "card" },
     h("div", { style: "display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap" }, h("strong", null, s.area || ""), h("span", { class: "price" }, krRange(s.perNightSEK) + "/natt")),
     s.type && h("span", { class: "label" }, s.type),
     h("p", { class: "small" }, s.why || ""),
     Array.isArray(s.examples) && s.examples.length ? h("p", { class: "small muted" }, "T.ex. " + s.examples.join(", ")) : null,
     h("div", { class: "actions small" },
+      !opts.readonly && s.area && h("button", { class: "btn sm", type: "button", onclick: e => areaHotels(e.currentTarget, slot, s.area, plan, i) }, "Livepriser i området"),
       ext(`https://www.booking.com/searchresults.sv.html?ss=${encodeURIComponent(`${s.area}, ${city}`)}&checkin=${i.from}&checkout=${i.to}&group_adults=${state.profile.adults}&group_children=${state.profile.children}&no_rooms=1`, "Booking.com", "small"),
-      ext(`https://sv.hotels.com/Hotel-Search?destination=${encodeURIComponent(`${s.area}, ${city}`)}&startDate=${i.from}&endDate=${i.to}&adults=${state.profile.adults}&rooms=1`, "Hotels.com", "small"))))));
+      ext(`https://sv.hotels.com/Hotel-Search?destination=${encodeURIComponent(`${s.area}, ${city}`)}&startDate=${i.from}&endDate=${i.to}&adults=${state.profile.adults}&rooms=1`, "Hotels.com", "small")),
+    slot); })));
 
   // Evenemang
   nodes.push(h("h3", null, "Händer när du är där"));
@@ -770,7 +1092,7 @@ function renderPlan(plan, i, out, opts = {}) {
       h("button", { class: "btn primary", type: "button", id: "dayBtn", onclick: () => runDayplan(dayOut) }, "Gör dagsplan"),
       h("button", { class: "btn", type: "button", onclick: async (e) => {
         e.currentTarget.disabled = true;
-        await saveTrip({ id: uid(), savedAt: new Date().toISOString(), input: i, plan, dayplan: state.dayplan });
+        await saveTrip({ id: uid(), savedAt: new Date().toISOString(), input: i, plan, dayplan: state.dayplan, live: state.live || null });
         toast("Resan är sparad");
       } }, "Spara resa"),
       ext(gcalLink(`Resa till ${city}`, i.from, i.to, plan.summary || ""), "Lägg resan i Google Kalender", "btn")));
@@ -1008,7 +1330,11 @@ function renderSaved() {
         h("div", null, h("strong", { style: "font-family:var(--f-display);font-size:1.3rem" }, t.plan?.city || t.input?.dest), h("div", { class: "small muted" }, t.input ? fmtRange(t.input.from, t.input.to) : "")),
         h("div", { class: "actions" },
           h("button", { class: "btn sm", type: "button", onclick: () => {
-            if (detail.hidden) { renderPlan(t.plan, t.input, detail, { readonly: true, dayplan: t.dayplan }); detail.prepend(linkSet({ origin: state.profile.home, dest: t.plan?.city || t.input.dest, iata: t.plan?.destinationIata, from: t.input.from, to: t.input.to, adults: state.profile.adults, children: state.profile.children })); }
+            if (detail.hidden) {
+              renderPlan(t.plan, t.input, detail, { readonly: true, dayplan: t.dayplan, live: t.live || {} });
+              if (t.live?.hotels?.items?.length) { const b = h("div", { class: "livebox" }); renderLiveHotels(b, t.live.hotels, { readonly: true }); detail.prepend(b); }
+              if (t.live?.flights?.items?.length) { const b = h("div", { class: "livebox" }); renderLiveFlights(b, t.live.flights, { readonly: true }); detail.prepend(b); }
+              detail.prepend(linkSet({ origin: state.profile.home, dest: t.plan?.city || t.input.dest, iata: t.plan?.destinationIata, from: t.input.from, to: t.input.to, adults: state.profile.adults, children: state.profile.children })); }
             detail.hidden = !detail.hidden;
           } }, "Visa"),
           delBtn, confirmBox)),
@@ -1020,7 +1346,7 @@ function renderSaved() {
 let profInterests = [];
 function fillProfileForm() {
   const p = state.profile;
-  $("#fHome").value = p.home; $("#fAlt").value = p.alt; $("#fAdults").value = p.adults; $("#fChildren").value = p.children;
+  $("#fHome").value = p.home; $("#fAlt").value = p.alt; $("#fAdults").value = p.adults; $("#fChildren").value = p.children; $("#fChildAges").value = p.childAges || "";
   $("#fBudget").value = p.budget; $("#fStops").value = p.stops; $("#fTime").value = p.time; $("#fBag").value = p.bag;
   $("#fStay").value = p.stay; $("#fStars").value = p.stars; $("#fArea").value = p.area; $("#fLoyalty").value = p.loyalty;
   $("#fPace").value = p.pace; $("#fDiet").value = p.diet; $("#fNotes").value = p.notes;
@@ -1033,7 +1359,7 @@ function saveProfile(ev) {
   state.profile = {
     ...state.profile,
     home: ($("#fHome").value.trim() || "ARN").toUpperCase(), alt: $("#fAlt").value.trim().toUpperCase(),
-    adults: Math.max(1, +$("#fAdults").value || 1), children: Math.max(0, +$("#fChildren").value || 0),
+    adults: Math.max(1, +$("#fAdults").value || 1), children: Math.max(0, +$("#fChildren").value || 0), childAges: parseAges($("#fChildAges").value).join(", "),
     budget: Math.max(0, +$("#fBudget").value || 0), stops: $("#fStops").value, time: $("#fTime").value, bag: $("#fBag").value,
     stay: $("#fStay").value, stars: $("#fStars").value, area: $("#fArea").value, loyalty: $("#fLoyalty").value.trim(),
     interests: [...profInterests], pace: $("#fPace").value, diet: $("#fDiet").value.trim(), notes: $("#fNotes").value.trim(),
@@ -1059,7 +1385,7 @@ const ENUMS = {
   stay: ["hotell", "lägenhet", "boutique", "vandrarhem", "vad som helst"], stars: ["2", "3", "4", "5"],
   area: ["centralt", "lugnt", "nära stranden", "nära evenemanget"], pace: ["lugnt", "lagom", "intensivt"],
 };
-const FIELD_LABEL = { home: "Hemflygplats", alt: "Alternativa flygplatser", adults: "Vuxna", children: "Barn", budget: "Budget", stops: "Byten",
+const FIELD_LABEL = { home: "Hemflygplats", alt: "Alternativa flygplatser", adults: "Vuxna", children: "Barn", childAges: "Barnens åldrar", budget: "Budget", stops: "Byten",
   time: "Avgångstid", bag: "Bagage", stay: "Boende", stars: "Standard", area: "Läge", loyalty: "Lojalitetsprogram", pace: "Tempo", diet: "Kost" };
 const VALUE_LABEL = { stops: { "0": "bara direktflyg", "1": "max 1 byte", "2": "spelar ingen roll" }, time: { any: "spelar ingen roll" }, stars: { "2": "2 stjärnor", "3": "3 stjärnor", "4": "4 stjärnor", "5": "5 stjärnor" } };
 const showVal = (k, v) => k === "budget" ? kr(v) : (VALUE_LABEL[k]?.[v] ?? String(v));
@@ -1105,10 +1431,11 @@ Regler:
 - Resdrömmar och planer ("vill till Japan någon gång", "springa Berlin maraton 2027") sparas med "add_plan". Ledig tid sparas med "add_leave".
 - Ändra befintliga poster via deras id i stället för att skapa dubbletter. Ta bort när användaren säger att något inte gäller längre.
 - Vill användaren få fram en konkret resa nu, lägg till "open_planner" med resmål och datum. Vill hen hitta evenemang för en period, lägg till "discover".
+- Frågar användaren vad flyg kostar, lägg till "flight_prices". Saknas datum, fråga först.
 - "reply" bekräftar kort vad du sparade (1–3 meningar) och får avslutas med en följdfråga som fyller i det som saknas i profilen. Inga långa listor. Allmänna resefrågor får du besvara kort.
 
 Svara ENDAST med JSON: {"reply":"...","actions":[...]}. Tom lista om inget ska sparas. Tillåtna actions:
-{"type":"profile","fields":{"home":"GOT","alt":"CPH, ARN","adults":2,"children":1,"budget":20000,"stops":"0|1|2","time":"any|morgon|dag|kväll","bag":"handbagage|incheckat","stay":"hotell|lägenhet|boutique|vandrarhem|vad som helst","stars":"2|3|4|5","area":"centralt|lugnt|nära stranden|nära evenemanget","loyalty":"text","pace":"lugnt|lagom|intensivt","diet":"text"}} (bara fält som ändras; stops 0 = bara direktflyg)
+{"type":"profile","fields":{"home":"GOT","alt":"CPH, ARN","adults":2,"children":1,"childAges":"6","budget":20000,"stops":"0|1|2","time":"any|morgon|dag|kväll","bag":"handbagage|incheckat","stay":"hotell|lägenhet|boutique|vandrarhem|vad som helst","stars":"2|3|4|5","area":"centralt|lugnt|nära stranden|nära evenemanget","loyalty":"text","pace":"lugnt|lagom|intensivt","diet":"text"}} (bara fält som ändras; stops 0 = bara direktflyg)
 {"type":"add_interests","items":["..."]}
 {"type":"remove_interests","items":["..."]}
 {"type":"remember","text":"..."}
@@ -1119,12 +1446,13 @@ Svara ENDAST med JSON: {"reply":"...","actions":[...]}. Tom lista om inget ska s
 {"type":"update_plan","id":"...","title":"...","destination":"...","from":"...","to":"...","when":"...","interest":"...","notes":"..."}
 {"type":"remove_plan","id":"..."}
 {"type":"open_planner","destination":"...","from":"YYYY-MM-DD","to":"YYYY-MM-DD"}
-{"type":"discover","from":"YYYY-MM-DD","to":"YYYY-MM-DD"}`;
+{"type":"discover","from":"YYYY-MM-DD","to":"YYYY-MM-DD"}
+{"type":"flight_prices","destination":"IATA-kod eller stadens engelska namn","from":"YYYY-MM-DD","to":"YYYY-MM-DD"} (när användaren frågar vad flyg kostar eller vill se priser: sidan hämtar då livepriser från Kiwi.com och visar dem under ditt svar, så hitta inte på priser själv)`;
 }
 
 const str = (v, max = 200) => (v == null ? "" : String(v).trim().slice(0, max));
 function applyActions(actions) {
-  const changes = [], buttons = [];
+  const changes = [], buttons = [], prices = [];
   const p = state.profile;
   for (const a of Array.isArray(actions) ? actions : []) {
     if (!a || typeof a !== "object") continue;
@@ -1139,6 +1467,7 @@ function applyActions(actions) {
             else if (k === "children") v = Math.min(9, Math.max(0, Math.round(+raw) || 0));
             else if (k === "budget") { v = Math.max(0, Math.round(+raw) || 0); if (!v) continue; }
             else if (k === "alt") v = str(raw, 60).toUpperCase();
+            else if (k === "childAges") { v = parseAges(raw).join(", "); if (!v) continue; }
             else if (k === "loyalty" || k === "diet") v = str(raw, 120);
             else continue;
             if (p[k] === v) continue;
@@ -1210,10 +1539,14 @@ function applyActions(actions) {
         case "discover":
           if (validIso(a.from) && validIso(a.to)) buttons.push({ kind: "discover", from: a.from, to: a.to });
           break;
+        case "flight_prices":
+          if (str(a.destination) && validIso(a.from) && validIso(a.to) && a.to > a.from && !prices.length)
+            prices.push({ dest: str(a.destination, 80), from: a.from, to: a.to });
+          break;
       }
     } catch (e) { console.warn("action", a, e); }
   }
-  return { changes, buttons };
+  return { changes, buttons, prices };
 }
 
 function openPlanner(dest, from, to) {
@@ -1243,6 +1576,7 @@ function renderChat() {
     return h("div", { class: "msg bot" + (m.error ? " err" : "") },
       h("div", { class: "bubble" }, m.text),
       (m.changes || []).length ? h("div", { class: "saved" }, h("span", { class: "label" }, m.undone ? "Ångrat" : "Sparat"), m.changes.map(c => h("span", { class: "s", style: m.undone ? "text-decoration:line-through;opacity:.6" : null }, c)), undoBtn) : null,
+      m.live ? chatLiveEl(m.live) : null,
       (m.buttons || []).length ? h("div", { class: "actions" }, m.buttons.map(actionButton)) : null);
   });
   const pending = chatPending ? h("div", { class: "msg bot" }, h("div", { class: "bubble" }, h("span", { class: "spinner", style: "display:inline-block;vertical-align:middle;margin-right:8px", "aria-hidden": "true" }), "Tänker…")) : null;
@@ -1277,11 +1611,12 @@ async function sendChat(ev) {
     const r = await sample.json(turns, { signal: chatCtl.signal, cache: false });
     if (!r || typeof r !== "object") throw { code: "invalid_json" };
     const snapshot = JSON.stringify({ profile: state.profile, leaves: state.leaves, wishes: state.wishes });
-    const { changes, buttons } = applyActions(r.actions);
+    const { changes, buttons, prices } = applyActions(r.actions);
     const msg = { role: "assistant", text: str(r.reply, 2000) || (changes.length ? "Klart, det är sparat." : "Okej."), changes, buttons };
     if (changes.length) { msg.snapshot = snapshot; state.profileSaved = true; persist(); }
     state.chat.push(msg);
     if (changes.length) renderAll();
+    if (prices.length) chatPrices(msg, prices[0]);
   } catch (e) {
     if (e?.code !== "cancelled") state.chat.push({ role: "assistant", text: errText(e), error: true });
   } finally {
@@ -1305,7 +1640,7 @@ function renderKnowledge() {
   const save = () => { persist(); renderAll(); };
   const facts = [
     ["Utgår från", [p.home, p.alt].filter(Boolean).join(", ")],
-    ["Resenärer", `${p.adults} ${p.adults == 1 ? "vuxen" : "vuxna"}${p.children ? `, ${p.children} barn` : ""}`],
+    ["Resenärer", `${p.adults} ${p.adults == 1 ? "vuxen" : "vuxna"}${p.children ? `, ${p.children} barn${p.childAges ? ` (${p.childAges} år)` : ""}` : ""}`],
     ["Budget", p.budget ? kr(p.budget) + " per resa" : ""],
     ["Flyg", [showVal("stops", p.stops), p.time !== "any" && `avgång ${p.time}`, p.bag].filter(Boolean).join(", ")],
     ["Boende", `${p.stay}, ${p.stars}+ stjärnor, ${p.area}`],
