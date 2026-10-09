@@ -20,6 +20,8 @@
   --board: #17212b;       /* tavla i headern, mörk i båda teman */
   --board-ink: #f2c14e;
   --board-sub: #9fb0bd;
+  --bar: #3f87c4;         /* diagram: månader (validerad mot ytan) */
+  --bar-hi: #b47600;      /* diagram: din resmånad */
   --f-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
   --f-body: "Barlow", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
@@ -30,6 +32,7 @@
     --bg: #0f151b; --surface: #17202a; --surface-2: #1f2a35; --ink: #e7ecef; --muted: #9aa8b3;
     --line: #2c3a46; --accent: #f2b632; --accent-ink: #1b1400; --sky: #74aee0; --good: #5fc489;
     --warn: #f0a640; --bad: #f07a7a; --board: #0a0f14; --board-ink: #f2c14e; --board-sub: #8a9aa7;
+    --bar: #3f8ad0; --bar-hi: #b67d0c;
     color-scheme: dark;
   }
 }
@@ -37,6 +40,7 @@
   --bg: #0f151b; --surface: #17202a; --surface-2: #1f2a35; --ink: #e7ecef; --muted: #9aa8b3;
   --line: #2c3a46; --accent: #f2b632; --accent-ink: #1b1400; --sky: #74aee0; --good: #5fc489;
   --warn: #f0a640; --bad: #f07a7a; --board: #0a0f14; --board-ink: #f2c14e; --board-sub: #8a9aa7;
+  --bar: #3f8ad0; --bar-hi: #b67d0c;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -166,6 +170,20 @@ details.more[open] > summary { margin-bottom: 8px; }
 .row-flight:first-child { border-top: 0; }
 .chatlive { display: grid; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: .88rem; }
 .chatlive .r { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+.offers { display: grid; gap: 4px; border-top: 1px solid var(--line); padding-top: 6px; }
+.offer { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: .88rem; }
+.offer.best { font-weight: 600; }
+.trendwrap { display: grid; gap: 8px; }
+.trend { position: relative; display: grid; grid-template-columns: repeat(var(--n), 1fr); gap: 2px; height: 170px; border-bottom: 1px solid var(--line); }
+.tcol { position: relative; display: flex; justify-content: center; align-items: flex-end; cursor: pointer; border-radius: 6px; }
+.tcol:hover, .tcol:focus-visible, .tcol.sel { background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+.tbar { position: relative; z-index: 1; width: min(38px, 62%); background: var(--bar); border-radius: 4px 4px 0 0; }
+.tcol.trip .tbar { background: var(--bar-hi); }
+.twhisk { position: absolute; left: 50%; width: 2px; transform: translateX(-50%); background: var(--muted); opacity: .55; }
+.tval { position: absolute; left: 0; right: 0; text-align: center; font-family: var(--f-mono); font-size: .72rem; color: var(--ink); white-space: nowrap; }
+.tlabels { display: grid; grid-template-columns: repeat(var(--n), 1fr); gap: 2px; text-align: center; font-size: .78rem; color: var(--muted); }
+.tlabels .trip { color: var(--ink); font-weight: 600; }
+.readout { font-size: .88rem; min-height: 1.4em; }
 /* Assistent */
 .chatgrid { display: grid; gap: 20px; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); align-items: start; }
 @media (max-width: 860px) { .chatgrid { grid-template-columns: 1fr; } }
@@ -254,7 +272,7 @@ details.more[open] > summary { margin-bottom: 8px; }
 
   <!-- PLANERA -->
   <section class="panel" id="panel-plan" data-panel="plan" hidden>
-    <p class="intro">Ange resmål och datum. Tryck på <b>Hitta resa</b> så hämtas livepriser på flyg från Kiwi.com och boenden från Booking.com utifrån din profil. Samtidigt tar Claude fram områden att bo i och evenemang som matchar dina intressen.</p>
+    <p class="intro">Ange resmål och datum. Tryck på <b>Hitta resa</b> så hämtas livepriser på flyg från Kiwi.com och boenden från Booking.com och Trivago utifrån din profil, plus en prisprognos för hotell månad för månad. Samtidigt tar Claude fram områden att bo i och evenemang som matchar dina intressen.</p>
     <form class="form" id="planForm" autocomplete="off">
       <div class="row">
         <div class="field"><label class="label" for="pDest">Resmål</label><input id="pDest" placeholder="t.ex. Barcelona eller BCN" required></div>
@@ -699,14 +717,15 @@ async function runPlan(ev) {
   const ctl = planCtl;
   busy($("#planBtn"), $("#planStop"), true);
   state.plan = null; state.planInput = i; state.dayplan = null; state.live = { flights: null, hotels: null };
-  const fBox = h("div", { class: "livebox" }), hBox = h("div", { class: "livebox" }), aiBox = h("div", { style: "display:grid;gap:20px" });
+  const fBox = h("div", { class: "livebox" }), hBox = h("div", { class: "livebox" }), tBox = h("div", { class: "livebox" }), aiBox = h("div", { style: "display:grid;gap:20px" });
   out.replaceChildren(
     h("div", { class: "sechead" }, h("h2", null, i.dest), h("span", { class: "small muted" }, `${fmtRange(i.from, i.to)} · ${daysBetween(i.from, i.to)} nätter`)),
-    fBox, hBox, aiBox);
+    fBox, hBox, tBox, aiBox);
   const current = () => planCtl === ctl;
   const dest = /^[A-Za-z]{3}$/.test(i.dest) ? i.dest.toUpperCase() : i.dest;
   const flightsTask = loadLiveFlights(fBox, { dest, from: i.from, to: i.to, flex: i.flex }, current);
   const hotelsTask = loadLiveHotels(hBox, { dest: i.dest, from: i.from, to: i.to }, current);
+  const trendTask = loadTrend(tBox, i.dest, i.from, current);
   const aiTask = (async () => {
     const sample = await getSample();
     if (!sample) { aiBox.replaceChildren(h("div", { class: "status" }, "Claude är inte tillgängligt i den här vyn, så evenemang och områdestips saknas.")); return null; }
@@ -724,7 +743,7 @@ async function runPlan(ev) {
       return null;
     }
   })();
-  const [fr, hr, plan] = await Promise.all([flightsTask, hotelsTask, aiTask]);
+  const [fr, hr, plan, tr] = await Promise.all([flightsTask, hotelsTask, aiTask, trendTask]);
   // Hittade connectorn inte resmålet på användarens stavning: försök igen med Claudes IATA-kod / engelska namn.
   if (current() && plan) {
     const retries = [];
@@ -732,6 +751,8 @@ async function runPlan(ev) {
       retries.push(loadLiveFlights(fBox, { dest: plan.destinationIata.toUpperCase(), from: i.from, to: i.to, flex: i.flex }, current));
     if (!hr?.ok && plan.cityEnglish && plan.cityEnglish !== i.dest)
       retries.push(loadLiveHotels(hBox, { dest: String(plan.cityEnglish).slice(0, 100), from: i.from, to: i.to }, current));
+    if (!tr?.ok && plan.cityEnglish && plan.cityEnglish !== i.dest)
+      retries.push(loadTrend(tBox, String(plan.cityEnglish).split(",")[0].slice(0, 80), i.from, current));
     await Promise.all(retries);
     if (retries.length && current()) renderPlan(plan, i, aiBox);
   }
@@ -912,8 +933,7 @@ function bookingInput(dest, from, to) {
   if (STAY_TYPE[p.stay]) inp.accommodation_types = STAY_TYPE[p.stay];
   const st = +p.stars;
   if (st >= 2 && ["hotell", "boutique"].includes(p.stay)) inp.star_rating = [2, 3, 4, 5].filter(n => n >= st);
-  const mem = [p.notes, ...(p.memories || []).map(m => m.text)].join(" ");
-  if (/gym|träna|träning|fitness/i.test(mem)) inp.facilities = ["FITNESS_CENTRE"];
+  if (wantsGym()) inp.facilities = ["FITNESS_CENTRE"];
   inp.user_query = [`${p.stay === "lägenhet" ? "Apartment" : p.stay === "vandrarhem" ? "Hostel" : "Hotel"} in ${dest}`,
     p.area === "centralt" && "central location within walking distance", p.area === "lugnt" && "quiet neighbourhood",
     p.area === "nära stranden" && "close to the beach", inp.facilities && "with a gym"].filter(Boolean).join(", ");
@@ -924,62 +944,221 @@ function normHotel(x) {
     stars: +x.rating?.stars || 0, score: +x.rating?.review_score || 0, reviews: +x.rating?.number_of_reviews || 0,
     district: str(x.location?.district_name, 60), city: str(x.location?.city_name, 60) };
 }
+function wantsGym() { const p = state.profile; return /gym|träna|träning|fitness/i.test([p.notes, ...(p.memories || []).map(m => m.text)].join(" ")); }
 async function bookingSearch(dest, from, to) {
   const p = await callConnector(BOOKING, "accommodations_search", bookingInput(dest, from, to));
   const list = p && Array.isArray(p.accommodations) ? p.accommodations : [];
-  return { items: list.map(normHotel).filter(x => x.name && Number.isFinite(x.total)), fetchedAt: Date.now(), query: { dest, from, to }, childrenMissing: +state.profile.children > 0 && !parseAges(state.profile.childAges).length };
+  return list.map(normHotel).filter(x => x.name && Number.isFinite(x.total));
 }
+
+/* Trivago: jämför priser hos flera bokningssajter */
+const TRIVAGO = "Trivago";
+const numFrom = s => { const n = +String(s ?? "").replace(/[^0-9]/g, ""); return n > 0 ? n : NaN; };
+function trivagoInput(dest, from, to) {
+  const p = state.profile;
+  const inp = { query: dest, arrival: from, departure: to, adults: Math.max(1, +p.adults || 1), rooms: 1, country: "SE", currency: "SEK", language: "SV_SE" };
+  const kids = +p.children || 0, ages = parseAges(p.childAges).slice(0, kids);
+  if (kids && ages.length === kids) { inp.children = kids; inp.children_ages = ages.join("-"); }
+  const st = +p.stars;
+  if (st >= 2 && ["hotell", "boutique"].includes(p.stay)) { inp.hotel_rating = {}; for (let n = st; n <= 5; n++) inp.hotel_rating[n + "star"] = true; }
+  const f = {};
+  if (wantsGym()) f.gym = true;
+  if (p.stay === "lägenhet") f.kitchen = true;
+  if (Object.keys(f).length) inp.filters = f;
+  return inp;
+}
+function normTrivago(x) {
+  return { id: "t" + str(x.accommodation_id, 40), name: str(x.accommodation_name, 120), url: safeUrl(x.accommodation_url), total: numFrom(x.price_per_stay),
+    stars: +x.hotel_rating || 0, score: parseFloat(String(x.review_rating || "").replace(",", ".")) || 0, reviews: numFrom(x.review_count) || 0,
+    district: str(x.distance, 80), city: str(x.country_city, 60).split(",")[0], via: str(x.advertisers, 40), amen: str(x.top_amenities, 160) };
+}
+async function trivagoSearch(dest, from, to) {
+  const p = await callConnector(TRIVAGO, "trivago-accommodation-search", trivagoInput(dest, from, to));
+  const list = p && Array.isArray(p.accommodations) ? p.accommodations : [];
+  return list.map(normTrivago).filter(x => x.name && Number.isFinite(x.total));
+}
+const fold = s => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const hotelKey = (n, city) => { let s = fold(n); const c = fold(city).trim(); if (c) s = s.split(c).join(" "); return s.replace(/\b(hotel|hotell|the|by)\b/g, "").replace(/[^a-z0-9]/g, ""); };
+function mergeHotels(booking, trivago) {
+  const map = new Map(), order = [];
+  const put = (x, offer) => {
+    const k = hotelKey(x.name, x.city) || x.id;
+    let m = map.get(k);
+    if (!m) { m = { id: x.id, name: x.name, stars: x.stars, score: x.score, reviews: x.reviews, district: x.district, city: x.city, amen: x.amen || "", offers: [] }; map.set(k, m); order.push(m); }
+    if (!m.score && x.score) { m.score = x.score; m.reviews = x.reviews; }
+    if (!m.amen && x.amen) m.amen = x.amen;
+    m.offers.push(offer);
+  };
+  // Varva listorna så att båda källornas relevansordning syns
+  for (let k = 0; k < Math.max(booking.length, trivago.length); k++) {
+    if (booking[k]) put(booking[k], { src: "Booking.com", total: booking[k].total, url: booking[k].url });
+    if (trivago[k]) put(trivago[k], { src: "Trivago", via: trivago[k].via, total: trivago[k].total, url: trivago[k].url });
+  }
+  for (const m of order) { m.offers.sort((a, b) => a.total - b.total); m.total = m.offers[0].total; }
+  return order;
+}
+const asMerged = x => (x.offers ? x : { ...x, offers: [{ src: "Booking.com", total: x.total, url: x.url }] });
+const oneKey = via => /one key/i.test(state.profile.loyalty || "") && /hotels\.com|expedia|vrbo/i.test(via || "");
 let hotelSort = "rel";
-function hotelCard(x, nights) {
-  const hcom = `https://sv.hotels.com/Hotel-Search?destination=${encodeURIComponent(`${x.name}, ${x.city}`)}&startDate=${state.planInput?.from || ""}&endDate=${state.planInput?.to || ""}&adults=${state.profile.adults}&rooms=1`;
+function hotelCard(x, nights, q) {
+  const hcom = `https://sv.hotels.com/Hotel-Search?destination=${encodeURIComponent(`${x.name}, ${x.city}`)}&startDate=${q.from || ""}&endDate=${q.to || ""}&adults=${state.profile.adults}&rooms=1`;
+  const multi = x.offers.length > 1;
   return h("div", { class: "card" },
     h("div", { style: "display:flex;justify-content:space-between;gap:8px;align-items:baseline" }, h("strong", { style: "min-width:0" }, x.name), h("span", { class: "price" }, kr(x.total))),
     h("div", { class: "small muted", style: "display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap" },
       h("span", null, [x.district, x.stars ? "★".repeat(Math.min(5, x.stars)) : ""].filter(Boolean).join(" · ")),
       h("span", null, nights ? `${kr(x.total / nights)}/natt` : "")),
     x.score ? h("div", { class: "small" }, h("span", { class: "score" }, x.score.toLocaleString("sv-SE")), ` ${x.reviews.toLocaleString("sv-SE")} omdömen`) : null,
-    h("div", { class: "actions small" }, x.url && ext(x.url, "Boka på Booking.com", "btn sm primary"), state.planInput && ext(hcom, "Jämför på Hotels.com", "small")));
+    x.amen ? h("div", { class: "small muted" }, x.amen) : null,
+    h("div", { class: "offers" }, x.offers.map((o, k) => h("div", { class: "offer" + (multi && k === 0 ? " best" : "") },
+      h("span", null, o.src === "Trivago" ? `Trivago${o.via ? `, via ${o.via}` : ""}` : o.src,
+        multi && k === 0 ? h("span", { class: "tag sure", style: "margin-left:6px" }, "Billigast") : null,
+        oneKey(o.via) ? h("span", { class: "tag likely", style: "margin-left:6px" }, "One Key") : null),
+      h("span", { class: "actions" }, h("span", { class: "price" }, kr(o.total)), o.url && ext(o.url, o.src === "Trivago" ? "Visa" : "Boka", "small"))))),
+    q.from && h("div", { class: "small" }, ext(hcom, "Sök på Hotels.com", "small")));
 }
 function renderLiveHotels(box, data, opts = {}) {
   const q = data.query || {};
   const nights = q.from && q.to ? daysBetween(q.from, q.to) : 0;
+  const all = (data.items || []).map(asMerged);
   const sorters = { rel: null, price: (a, b) => a.total - b.total, score: (a, b) => b.score - a.score || a.total - b.total };
-  const items = sorters[hotelSort] ? [...data.items].sort(sorters[hotelSort]) : data.items;
+  const items = sorters[hotelSort] ? [...all].sort(sorters[hotelSort]) : all;
+  const srcs = (data.sources || ["Booking.com"]).join(" och ");
   const head = h("div", { class: "sechead" }, h("h3", null, "Boende"),
-    h("span", { class: "small muted srcline" }, h("span", null, h("span", { class: "live-dot", "aria-hidden": "true" }), opts.readonly ? `Pris ${clock(data.fetchedAt)}` : `Livepriser från Booking.com, hämtade ${clock(data.fetchedAt)}`), h("span", null, `totalpris för ${nights} nätter`)));
-  if (!items.length) { box.replaceChildren(head, h("div", { class: "empty" }, "Booking.com hittade inga lediga boenden som matchar din profil. Prova lägre standard eller annan boendetyp i profilen.")); return; }
+    h("span", { class: "small muted srcline" }, h("span", null, h("span", { class: "live-dot", "aria-hidden": "true" }), opts.readonly ? `Pris ${clock(data.fetchedAt)}` : `Livepriser från ${srcs}, hämtade ${clock(data.fetchedAt)}`), h("span", null, `totalpris för ${nights} nätter`)));
+  const errs = (data.errors || []).map(e => connectorError(e.server, { code: e.code, message: e.message }));
+  if (!items.length) { box.replaceChildren(head, ...errs, h("div", { class: "empty" }, "Inga lediga boenden hittades som matchar din profil. Prova lägre standard eller annan boendetyp i profilen.")); return; }
+  const compared = items.filter(x => x.offers.length > 1).length;
   const chips = !opts.readonly && h("div", { class: "chips" }, [["rel", "Bäst match"], ["price", "Lägst pris"], ["score", "Högst betyg"]].map(([k, l]) =>
     h("button", { type: "button", class: "chip", "aria-pressed": String(hotelSort === k), onclick: () => { hotelSort = k; renderLiveHotels(box, data, opts); } }, l)));
   const first = items.slice(0, 6), more = items.slice(6);
-  box.replaceChildren(head, chips || "",
+  box.replaceChildren(head, chips || "", ...errs,
+    compared ? h("p", { class: "small muted" }, `${compared} ${compared === 1 ? "boende finns" : "boenden finns"} hos båda källorna. Det billigaste erbjudandet visas först.`) : "",
     data.childrenMissing ? h("p", { class: "small muted" }, "Priserna gäller bara vuxna. Lägg till barnens åldrar i profilen så räknas de med.") : "",
-    h("div", { class: "grid2" }, first.map(x => hotelCard(x, nights))),
-    more.length ? h("details", { class: "more" }, h("summary", null, `Visa ${more.length} till`), h("div", { class: "grid2" }, more.map(x => hotelCard(x, nights)))) : "");
+    h("div", { class: "grid2" }, first.map(x => hotelCard(x, nights, q))),
+    more.length ? h("details", { class: "more" }, h("summary", null, `Visa ${more.length} till`), h("div", { class: "grid2" }, more.map(x => hotelCard(x, nights, q)))) : "");
 }
 async function loadLiveHotels(box, q, current) {
-  box.replaceChildren(statusEl(`Hämtar lediga boenden och priser från Booking.com i ${q.dest}…`));
-  try {
-    const data = await bookingSearch(q.dest, q.from, q.to);
-    if (!current()) return { ok: false };
-    state.live = { ...(state.live || {}), hotels: data };
-    renderLiveHotels(box, data);
-    return { ok: data.items.length > 0 };
-  } catch (e) {
-    if (current()) box.replaceChildren(h("h3", null, "Boende"), connectorError(BOOKING, e, () => loadLiveHotels(box, q, current)));
-    return { ok: false, error: e };
+  box.replaceChildren(statusEl(`Hämtar lediga boenden och jämför priser i ${q.dest}…`));
+  const [b, tv] = await Promise.allSettled([bookingSearch(q.dest, q.from, q.to), trivagoSearch(q.dest, q.from, q.to)]);
+  if (!current()) return { ok: false };
+  const errors = [], sources = [];
+  if (b.status === "fulfilled") sources.push("Booking.com"); else errors.push({ server: BOOKING, code: b.reason?.code, message: b.reason?.message });
+  if (tv.status === "fulfilled") sources.push("Trivago"); else errors.push({ server: TRIVAGO, code: tv.reason?.code, message: tv.reason?.message });
+  if (!sources.length) {
+    box.replaceChildren(h("h3", null, "Boende"), ...errors.map(e => connectorError(e.server, e, () => loadLiveHotels(box, q, current))));
+    return { ok: false };
   }
+  const items = mergeHotels(b.value || [], tv.value || []);
+  const data = { items, fetchedAt: Date.now(), query: q, sources, errors: errors.filter(e => !["no_mcp", "not_granted"].includes(e.code)),
+    childrenMissing: +state.profile.children > 0 && parseAges(state.profile.childAges).length < +state.profile.children };
+  state.live = { ...(state.live || {}), hotels: data };
+  renderLiveHotels(box, data);
+  return { ok: items.length > 0 };
+}
+
+/* Trivago: prisprognos per månad */
+const ymOf = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+const monthLabel = (ym, withYear) => { const [y, m] = ym.split("-").map(Number); return new Date(y, m - 1, 1).toLocaleDateString("sv-SE", withYear ? { month: "short", year: "numeric" } : { month: "short" }).replace(".", ""); };
+async function trivagoTrend(dest, startYm, endYm, tripYm) {
+  const st = Math.min(5, Math.max(3, +state.profile.stars || 3));
+  const p = await callConnector(TRIVAGO, "trivago-destination-price-trends", { query: dest, country: "SE", currency: "SEK", language: "SV_SE", start_month: startYm, end_month: endYm, hotel_rating: { [st + "star"]: true } });
+  const d0 = p && Array.isArray(p.destinations) ? p.destinations[0] : null;
+  const months = (d0 && Array.isArray(d0.monthly_prices) ? d0.monthly_prices : []).map(m => {
+    const rows = Array.isArray(m.star_rating_prices) ? m.star_rating_prices : [];
+    const r = rows.find(x => +x.star_rating === st) || rows[0] || {};
+    return { month: String(m.month || ""), avg: numFrom(r.average_price), min: numFrom(r.minimum_price), max: numFrom(r.maximum_price) };
+  }).filter(m => /^\d{4}-\d{2}$/.test(m.month) && Number.isFinite(m.avg));
+  return { dest: str(d0?.name, 60) || dest, stars: st, months, tripYm: tripYm || "", fetchedAt: Date.now() };
+}
+function trendChart(t, compact = false) {
+  const ms = t.months; if (!ms.length) return null;
+  const top = Math.max(...ms.map(m => (Number.isFinite(m.max) ? m.max : m.avg))) * 1.18;
+  const pct = v => `${(v / top) * 100}%`;
+  const cheapest = ms.reduce((a, b) => (b.avg < a.avg ? b : a));
+  const trip = ms.find(m => m.month === t.tripYm);
+  const yearsDiffer = ms[0].month.slice(0, 4) !== ms[ms.length - 1].month.slice(0, 4);
+  const lab = m => monthLabel(m.month, yearsDiffer && (m.month.endsWith("-01") || m === ms[0]));
+  const readout = h("div", { class: "readout" });
+  const show = m => { readout.textContent = `${monthLabel(m.month, true)}: snitt ${kr(m.avg)} per natt${Number.isFinite(m.min) && Number.isFinite(m.max) ? ` (från ${kr(m.min)} till ${kr(m.max)})` : ""}`; cols.forEach(c => c.classList.toggle("sel", c.dataset.m === m.month)); };
+  const cols = ms.map(m => {
+    const lbl = m === trip || m === cheapest;
+    const c = h("div", { class: "tcol" + (m === trip ? " trip" : ""), tabindex: "0", role: "button", "data-m": m.month, "aria-label": `${monthLabel(m.month, true)}, snitt ${kr(m.avg)} per natt` },
+      Number.isFinite(m.min) && Number.isFinite(m.max) ? h("span", { class: "twhisk", style: `bottom:${pct(m.min)};height:calc(${pct(m.max)} - ${pct(m.min)})` }) : null,
+      h("span", { class: "tbar", style: `height:${pct(m.avg)}` }),
+      lbl ? h("span", { class: "tval", style: `bottom:calc(${pct(Number.isFinite(m.max) ? m.max : m.avg)} + 3px)` }, Math.round(m.avg).toLocaleString("sv-SE")) : null);
+    ["mouseenter", "focus", "click"].forEach(ev => c.addEventListener(ev, () => show(m)));
+    return c;
+  });
+  show(trip || cheapest);
+  const save = trip && cheapest !== trip ? Math.round((1 - cheapest.avg / trip.avg) * 100) : 0;
+  const headline = trip
+    ? (cheapest === trip ? `${monthLabel(trip.month)} är den billigaste månaden av de här för hotell.` : `${monthLabel(cheapest.month, true)} är i snitt ${save} % billigare än ${monthLabel(trip.month)}.`)
+    : `Billigast: ${monthLabel(cheapest.month, true)}, snitt ${kr(cheapest.avg)} per natt.`;
+  return h("div", { class: "trendwrap" },
+    h("p", { style: "margin:0;font-weight:600" }, headline),
+    h("div", { class: "trend", style: `--n:${ms.length};${compact ? "height:120px" : ""}` }, cols),
+    h("div", { class: "tlabels", style: `--n:${ms.length}` }, ms.map(m => h("span", { class: m === trip ? "trip" : "" }, lab(m)))),
+    readout,
+    h("p", { class: "small muted", style: "margin:0" }, `Prognos från Trivago för ${t.stars}-stjärniga hotell i ${t.dest}. Stapeln visar snittpris per natt, strecket spannet mellan billigaste och dyraste.${trip ? " Din resmånad är markerad." : ""}`),
+    !compact && h("details", { class: "more" }, h("summary", null, "Visa som tabell"),
+      h("div", { style: "overflow-x:auto" }, h("table", { class: "small", style: "border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums" },
+        h("thead", null, h("tr", null, ["Månad", "Snitt/natt", "Lägst", "Högst"].map(x => h("th", { style: "text-align:left;padding:4px 8px;border-bottom:1px solid var(--line)" }, x)))),
+        h("tbody", null, ms.map(m => h("tr", null, [monthLabel(m.month, true), kr(m.avg), Number.isFinite(m.min) ? kr(m.min) : "–", Number.isFinite(m.max) ? kr(m.max) : "–"].map(x => h("td", { style: "padding:4px 8px;border-bottom:1px solid var(--line)" }, x)))))))));
+}
+function renderTrend(box, t) {
+  const chart = trendChart(t);
+  if (!chart) { box.replaceChildren(); return; }
+  box.replaceChildren(h("div", { class: "sechead" }, h("h3", null, "Hotellpriser över året"), h("span", { class: "small muted" }, `Trivago, hämtat ${clock(t.fetchedAt)}`)), h("div", { class: "card" }, chart));
+}
+async function loadTrend(box, dest, from, current) {
+  const d = parse(from);
+  let start = new Date(d.getFullYear(), d.getMonth() - 2, 1);
+  const thisMonth = new Date(TODAY.getFullYear(), TODAY.getMonth(), 1);
+  if (start < thisMonth) start = thisMonth;
+  const end = new Date(start.getFullYear(), start.getMonth() + 5, 1);
+  try {
+    const t = await trivagoTrend(dest, ymOf(start), ymOf(end), ymOf(d));
+    if (!current()) return { ok: false };
+    state.live = { ...(state.live || {}), trend: t };
+    renderTrend(box, t);
+    return { ok: t.months.length > 0 };
+  } catch (e) {
+    if (current()) box.replaceChildren(["no_mcp", "not_granted", "capability_disabled"].includes(e?.code) ? "" : h("div", null, h("h3", null, "Hotellpriser över året"), connectorError(TRIVAGO, e, () => loadTrend(box, dest, from, current))));
+    return { ok: false };
+  }
+}
+async function chatTrend(msg, q) {
+  msg.trend = { status: "loading", dest: q.dest };
+  renderChat();
+  const now = ymOf(new Date(TODAY.getFullYear(), TODAY.getMonth(), 1));
+  let from = q.from && q.from >= now ? q.from : now;
+  const [fy, fm] = from.split("-").map(Number);
+  const maxEnd = ymOf(new Date(fy, fm - 1 + 11, 1));
+  let to = q.to && q.to >= from && q.to <= maxEnd ? q.to : ymOf(new Date(fy, fm - 1 + 5, 1));
+  try { msg.trend = { status: "ok", ...(await trivagoTrend(q.dest, from, to, "")) }; }
+  catch (e) { msg.trend = { status: "error", dest: q.dest, code: e?.code || "upstream_error" }; }
+  persistChat(); renderChat();
+}
+function chatTrendEl(t) {
+  const title = h("div", { class: "r" }, h("strong", null, `Hotellpriser i ${t.dest}`));
+  if (t.status === "loading") return h("div", { class: "chatlive" }, title, h("div", { class: "muted" }, h("span", { class: "spinner", style: "display:inline-block;vertical-align:middle;margin-right:6px", "aria-hidden": "true" }), "Hämtar prisprognos från Trivago…"));
+  if (t.status === "error") return h("div", { class: "chatlive" }, title, connectorError(TRIVAGO, { code: t.code }));
+  return h("div", { class: "chatlive" }, title, trendChart(t, true) || h("div", { class: "muted" }, "Trivago har ingen prognos för det resmålet."));
 }
 async function areaHotels(btn, slot, area, plan, i) {
   btn.disabled = true;
-  slot.replaceChildren(statusEl("Hämtar från Booking.com…"));
+  slot.replaceChildren(statusEl("Hämtar från Booking.com och Trivago…"));
   const dest = `${area}, ${plan.cityEnglish || plan.city || i.dest}`.slice(0, 100);
   try {
-    const data = await bookingSearch(dest, i.from, i.to);
+    const [b, tv] = await Promise.allSettled([bookingSearch(dest, i.from, i.to), trivagoSearch(dest, i.from, i.to)]);
+    if (b.status === "rejected" && tv.status === "rejected") throw b.reason;
+    const items = mergeHotels(b.value || [], tv.value || []);
     const n = daysBetween(i.from, i.to);
-    slot.replaceChildren(data.items.length
-      ? h("div", { class: "klist" }, [...data.items].sort((a, b) => b.score - a.score || a.total - b.total).slice(0, 3).map(x => h("div", null,
+    slot.replaceChildren(items.length
+      ? h("div", { class: "klist" }, [...items].sort((a, b) => b.score - a.score || a.total - b.total).slice(0, 3).map(x => h("div", null,
           h("span", { style: "min-width:0" }, x.name, h("span", { class: "muted small" }, x.score ? ` · ${x.score.toLocaleString("sv-SE")}` : "")),
-          h("span", { class: "actions" }, h("span", { class: "price small" }, `${kr(x.total / n)}/natt`), x.url && ext(x.url, "Boka", "small")))))
+          h("span", { class: "actions" }, h("span", { class: "price small" }, `${kr(x.total / n)}/natt`), x.offers[0].url && ext(x.offers[0].url, x.offers[0].src === "Trivago" ? "Visa" : "Boka", "small")))))
       : h("p", { class: "small muted" }, "Inga lediga boenden i området som matchar profilen."));
   } catch (e) { slot.replaceChildren(connectorError(BOOKING, e, () => areaHotels(btn, slot, area, plan, i))); }
   finally { btn.disabled = false; }
@@ -1332,6 +1511,7 @@ function renderSaved() {
           h("button", { class: "btn sm", type: "button", onclick: () => {
             if (detail.hidden) {
               renderPlan(t.plan, t.input, detail, { readonly: true, dayplan: t.dayplan, live: t.live || {} });
+              if (t.live?.trend?.months?.length) { const b = h("div", { class: "livebox" }); renderTrend(b, t.live.trend); detail.prepend(b); }
               if (t.live?.hotels?.items?.length) { const b = h("div", { class: "livebox" }); renderLiveHotels(b, t.live.hotels, { readonly: true }); detail.prepend(b); }
               if (t.live?.flights?.items?.length) { const b = h("div", { class: "livebox" }); renderLiveFlights(b, t.live.flights, { readonly: true }); detail.prepend(b); }
               detail.prepend(linkSet({ origin: state.profile.home, dest: t.plan?.city || t.input.dest, iata: t.plan?.destinationIata, from: t.input.from, to: t.input.to, adults: state.profile.adults, children: state.profile.children })); }
@@ -1432,6 +1612,7 @@ Regler:
 - Ändra befintliga poster via deras id i stället för att skapa dubbletter. Ta bort när användaren säger att något inte gäller längre.
 - Vill användaren få fram en konkret resa nu, lägg till "open_planner" med resmål och datum. Vill hen hitta evenemang för en period, lägg till "discover".
 - Frågar användaren vad flyg kostar, lägg till "flight_prices". Saknas datum, fråga först.
+- Frågar användaren när det är billigast att bo eller åka någonstans, lägg till "hotel_trend" (sidan visar Trivagos prisprognos per månad).
 - "reply" bekräftar kort vad du sparade (1–3 meningar) och får avslutas med en följdfråga som fyller i det som saknas i profilen. Inga långa listor. Allmänna resefrågor får du besvara kort.
 
 Svara ENDAST med JSON: {"reply":"...","actions":[...]}. Tom lista om inget ska sparas. Tillåtna actions:
@@ -1447,6 +1628,7 @@ Svara ENDAST med JSON: {"reply":"...","actions":[...]}. Tom lista om inget ska s
 {"type":"remove_plan","id":"..."}
 {"type":"open_planner","destination":"...","from":"YYYY-MM-DD","to":"YYYY-MM-DD"}
 {"type":"discover","from":"YYYY-MM-DD","to":"YYYY-MM-DD"}
+{"type":"hotel_trend","destination":"stadens engelska namn","from":"YYYY-MM (första månaden)","to":"YYYY-MM (sista månaden, max 12 månader senare)"}
 {"type":"flight_prices","destination":"IATA-kod eller stadens engelska namn","from":"YYYY-MM-DD","to":"YYYY-MM-DD"} (när användaren frågar vad flyg kostar eller vill se priser: sidan hämtar då livepriser från Kiwi.com och visar dem under ditt svar, så hitta inte på priser själv)`;
 }
 
@@ -1539,8 +1721,14 @@ function applyActions(actions) {
         case "discover":
           if (validIso(a.from) && validIso(a.to)) buttons.push({ kind: "discover", from: a.from, to: a.to });
           break;
+        case "hotel_trend":
+          if (str(a.destination) && !prices.some(x => x.trend)) {
+            const ym = v => (/^\d{4}-\d{2}/.test(String(v || "")) ? String(v).slice(0, 7) : "");
+            prices.push({ trend: true, dest: str(a.destination, 80), from: ym(a.from), to: ym(a.to) });
+          }
+          break;
         case "flight_prices":
-          if (str(a.destination) && validIso(a.from) && validIso(a.to) && a.to > a.from && !prices.length)
+          if (str(a.destination) && validIso(a.from) && validIso(a.to) && a.to > a.from && !prices.some(x => !x.trend))
             prices.push({ dest: str(a.destination, 80), from: a.from, to: a.to });
           break;
       }
@@ -1577,6 +1765,7 @@ function renderChat() {
       h("div", { class: "bubble" }, m.text),
       (m.changes || []).length ? h("div", { class: "saved" }, h("span", { class: "label" }, m.undone ? "Ångrat" : "Sparat"), m.changes.map(c => h("span", { class: "s", style: m.undone ? "text-decoration:line-through;opacity:.6" : null }, c)), undoBtn) : null,
       m.live ? chatLiveEl(m.live) : null,
+      m.trend ? chatTrendEl(m.trend) : null,
       (m.buttons || []).length ? h("div", { class: "actions" }, m.buttons.map(actionButton)) : null);
   });
   const pending = chatPending ? h("div", { class: "msg bot" }, h("div", { class: "bubble" }, h("span", { class: "spinner", style: "display:inline-block;vertical-align:middle;margin-right:8px", "aria-hidden": "true" }), "Tänker…")) : null;
@@ -1616,7 +1805,9 @@ async function sendChat(ev) {
     if (changes.length) { msg.snapshot = snapshot; state.profileSaved = true; persist(); }
     state.chat.push(msg);
     if (changes.length) renderAll();
-    if (prices.length) chatPrices(msg, prices[0]);
+    const fq = prices.find(x => !x.trend), tq = prices.find(x => x.trend);
+    if (fq) chatPrices(msg, fq);
+    if (tq) chatTrend(msg, tq);
   } catch (e) {
     if (e?.code !== "cancelled") state.chat.push({ role: "assistant", text: errText(e), error: true });
   } finally {
