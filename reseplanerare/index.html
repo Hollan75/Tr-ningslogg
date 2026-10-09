@@ -228,7 +228,7 @@ details.more[open] > summary { margin-bottom: 8px; }
   <div class="wrap">
     <div class="brand">
       <h1>Resekompassen</h1>
-      <p>Flyg, boende och evenemang utifrån dina ledigheter och intressen · <span class="mono" id="appVersion">v9</span></p>
+      <p>Flyg, boende och evenemang utifrån dina ledigheter och intressen · <span class="mono" id="appVersion">v10</span></p>
     </div>
     <div class="flap" id="flap" aria-label="Aktuell rutt"></div>
   </div>
@@ -399,7 +399,7 @@ details.more[open] > summary { margin-bottom: 8px; }
 (() => {
 "use strict";
 // Visa fel synligt, så att de går att skärmdumpa på telefonen.
-const showErr = msg => { const b = document.getElementById("errBar"); if (!b) return; b.hidden = false; b.textContent = "Fel (v9): " + String(msg).slice(0, 300) + " · Ta en skärmdump och skicka till Claude."; };
+const showErr = msg => { const b = document.getElementById("errBar"); if (!b) return; b.hidden = false; b.textContent = "Fel (v10): " + String(msg).slice(0, 300) + " · Ta en skärmdump och skicka till Claude."; };
 window.addEventListener("error", e => showErr(e.message || e.error || "okänt fel"));
 window.addEventListener("unhandledrejection", e => { const r = e.reason; if (r && (r.code === "cancelled")) return; showErr((r && (r.message || r.code)) || r || "okänt fel"); });
 
@@ -1263,7 +1263,9 @@ function renderPlan(plan, i, out, opts = {}) {
       h("div", { style: "display:flex;gap:8px;flex-wrap:wrap;align-items:baseline" }, h("strong", null, e.name || ""), certaintyTag(e.certainty)),
       h("div", { class: "small muted" }, [validIso(e.startDate) && (e.endDate && e.endDate !== e.startDate ? fmtRange(e.startDate, e.endDate) : fmtDay(e.startDate)), e.place, e.interest].filter(Boolean).join(" · ")),
       e.why && h("div", { class: "small" }, e.why),
-      ext(`https://www.google.com/search?q=${encodeURIComponent(`${e.name} ${city} ${(e.startDate || "").slice(0, 4)}`)}`, "Kolla datum och biljetter", "small")))))
+      h("div", { class: "actions", style: "margin-top:2px" },
+        eventSaveBtn({ name: e.name, city, startDate: e.startDate, endDate: e.endDate, departDate: i.from, returnDate: i.to, interest: e.interest, why: e.why }),
+        ext(`https://www.google.com/search?q=${encodeURIComponent(`${e.name} ${city} ${(e.startDate || "").slice(0, 4)}`)}`, "Kolla datum och biljetter", "small"))))))
     : h("div", { class: "empty" }, "Claude hittade inga evenemang som matchar dina intressen under perioden. Prova evenemangssökningen eller fler intressen."));
 
   if (Array.isArray(plan.tips) && plan.tips.length) {
@@ -1448,7 +1450,40 @@ function renderDiscover(list, out) {
             selectTab("plan"); updatePlanLinks(); $("#planOut").replaceChildren();
             toast("Resan är ifylld. Tryck Hitta resa.");
           } }, "Planera resa dit"),
+          eventSaveBtn({ name: x.event, city: x.city || x.iata, startDate: x.startDate, endDate: x.endDate, departDate: x.departDate, returnDate: x.returnDate, interest: x.interest, why: x.why }),
           ext(`https://www.google.com/search?q=${encodeURIComponent(`${x.event} ${(x.startDate || "").slice(0, 4)}`)}`, "Kolla datum", "btn sm")))))));
+}
+
+/* ---------- Spara evenemang (markera) ---------- */
+const eventKey = (name, start) => String(name || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "") + "|" + (start || "");
+function eventSaveBtn(ev) {
+  if (!ev.name) return null;
+  const key = eventKey(ev.name, ev.startDate);
+  const btn = h("button", { class: "btn sm", type: "button" });
+  const paint = () => {
+    const saved = state.wishes.some(w => w.eventKey === key);
+    btn.setAttribute("aria-pressed", String(saved));
+    btn.textContent = saved ? "★ Sparat" : "☆ Spara";
+    btn.style.borderColor = saved ? "var(--accent)" : "";
+  };
+  btn.addEventListener("click", () => {
+    if (state.wishes.some(w => w.eventKey === key)) {
+      state.wishes = state.wishes.filter(w => w.eventKey !== key);
+      toast("Borttaget från dina resplaner");
+    } else {
+      const dates = validIso(ev.startDate) ? (ev.endDate && ev.endDate !== ev.startDate ? fmtRange(ev.startDate, ev.endDate) : fmtDay(ev.startDate)) : "";
+      state.wishes = [...state.wishes, {
+        id: uid(), eventKey: key, title: str(ev.name, 80), destination: str(ev.city, 80), interest: str(ev.interest, 40),
+        from: validIso(ev.departDate) ? ev.departDate : (validIso(ev.startDate) ? ev.startDate : ""),
+        to: validIso(ev.returnDate) ? ev.returnDate : (validIso(ev.endDate) ? ev.endDate : ""),
+        when: dates, notes: str([dates && `Evenemang ${dates}`, ev.why].filter(Boolean).join(". "), 240), createdAt: iso(TODAY),
+      }];
+      toast("Sparat under Resplaner och drömmar");
+    }
+    persist(); renderKnowledge(); paint();
+  });
+  paint();
+  return btn;
 }
 
 /* ---------- LEDIGHETER ---------- */
