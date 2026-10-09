@@ -40,6 +40,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5; }
 .wrap { max-width: 980px; margin: 0 auto; padding-inline: 16px; padding-block: 0 48px; }
 h1, h2, h3 { font-family: var(--f-display); font-weight: 600; line-height: 1.1; text-wrap: balance; margin: 0; letter-spacing: .01em; }
@@ -149,6 +150,35 @@ section.panel { display: grid; gap: 20px; padding-top: 22px; }
 .item .t { font-family: var(--f-mono); color: var(--muted); font-size: .85rem; padding-top: 2px; }
 pre.ics { white-space: pre-wrap; word-break: break-all; font-family: var(--f-mono); font-size: .75rem; background: var(--surface-2); padding: 10px; border-radius: 8px; max-height: 200px; overflow: auto; }
 
+/* Assistent */
+.chatgrid { display: grid; gap: 20px; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); align-items: start; }
+@media (max-width: 860px) { .chatgrid { grid-template-columns: 1fr; } }
+.chatbox { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); display: grid; grid-template-rows: auto auto; min-width: 0; }
+.chatlog { display: flex; flex-direction: column; gap: 12px; padding: 16px; max-height: 62vh; min-height: 260px; overflow-y: auto; }
+.msg { max-width: 88%; display: grid; gap: 6px; }
+.msg .bubble { padding: 10px 13px; border-radius: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.user { align-self: flex-end; }
+.msg.user .bubble { background: var(--ink); color: var(--bg); border-bottom-right-radius: 4px; }
+.msg.bot { align-self: flex-start; }
+.msg.bot .bubble { background: var(--surface-2); border-bottom-left-radius: 4px; }
+.msg.err .bubble { background: transparent; border: 1px solid var(--bad); color: var(--bad); }
+.saved { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+.saved .s { font-size: .8rem; border: 1px solid color-mix(in srgb, var(--good) 45%, transparent); color: var(--good); border-radius: 999px; padding: 1px 9px; }
+.composer { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 12px; border-top: 1px solid var(--line); align-items: end; }
+.composer textarea { width: 100%; resize: none; min-height: 46px; max-height: 160px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.composer .side { display: grid; gap: 6px; }
+.examples { padding: 0 12px 12px; }
+.kcard { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 8px; min-width: 0; }
+.kcard h3 { font-size: 1.1rem; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: .9rem; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.klist { display: grid; gap: 0; }
+.klist > div { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--line); font-size: .92rem; }
+.klist > div:first-child { border-top: 0; }
+.klist .actions { flex: none; }
+.x { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 1.1rem; line-height: 1; padding: 2px 6px; border-radius: 6px; }
+.x:hover { color: var(--bad); background: var(--surface-2); }
 .confirm { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-weight: 500; z-index: 20; max-width: calc(100% - 32px); }
 @media (max-width: 520px) {
@@ -172,6 +202,7 @@ pre.ics { white-space: pre-wrap; word-break: break-all; font-family: var(--f-mon
 
 <nav class="tabs" aria-label="Sektioner">
   <div class="wrap" role="tablist">
+    <button class="tab" role="tab" data-tab="chat" id="tab-chat">Assistent</button>
     <button class="tab" role="tab" data-tab="plan" id="tab-plan">Planera resa</button>
     <button class="tab" role="tab" data-tab="discover" id="tab-discover">Upptäck evenemang</button>
     <button class="tab" role="tab" data-tab="leave" id="tab-leave">Ledigheter</button>
@@ -182,8 +213,31 @@ pre.ics { white-space: pre-wrap; word-break: break-all; font-family: var(--f-mon
 
 <main class="wrap">
 
+  <!-- ASSISTENT -->
+  <section class="panel" id="panel-chat" data-panel="chat">
+    <div class="chatgrid">
+      <div class="chatbox">
+        <div class="chatlog" id="chatLog" aria-live="polite"></div>
+        <form class="composer" id="chatForm" autocomplete="off">
+          <label for="chatInput" class="label" hidden>Meddelande</label>
+          <textarea id="chatInput" rows="1" placeholder="Berätta om planer, ledigheter eller vad du gillar. Diktera gärna med tangentbordets mikrofon."></textarea>
+          <div class="side">
+            <button class="btn primary" type="submit" id="chatSend">Skicka</button>
+            <button class="btn ghost sm" type="button" id="chatStop" hidden>Avbryt</button>
+          </div>
+        </form>
+        <div class="chips examples" id="chatExamples"></div>
+      </div>
+      <div style="display:grid;gap:12px;min-width:0">
+        <div class="sechead"><h2>Det här vet jag om dig</h2></div>
+        <div id="knowledge" style="display:grid;gap:12px"></div>
+        <span class="small muted" id="storeMode2"></span>
+      </div>
+    </div>
+  </section>
+
   <!-- PLANERA -->
-  <section class="panel" id="panel-plan" data-panel="plan">
+  <section class="panel" id="panel-plan" data-panel="plan" hidden>
     <p class="intro">Ange resmål och datum. Bokningslänkarna nedan fylls i direkt. Tryck på <b>Hitta resa</b> så tar Claude fram flygalternativ, områden att bo i, evenemang som matchar dina intressen och billigare datum i närheten.</p>
     <form class="form" id="planForm" autocomplete="off">
       <div class="row">
@@ -414,9 +468,9 @@ const DEFAULT_INTERESTS = ["Löpning & lopp", "Fotboll", "Formel 1", "Konserter"
 const DEFAULT_PROFILE = {
   home: "ARN", alt: "", adults: 1, children: 0, budget: 15000, stops: "1", time: "any", bag: "handbagage",
   stay: "hotell", stars: "3", area: "centralt", loyalty: "", interests: ["Löpning & lopp", "Mat & vin", "Konserter"],
-  customInterests: [], pace: "lagom", diet: "", notes: "",
+  customInterests: [], pace: "lagom", diet: "", notes: "", memories: [],
 };
-const state = { profile: { ...DEFAULT_PROFILE }, leaves: [], trips: [], plan: null, planInput: null, dayplan: null, profileSaved: false };
+const state = { profile: { ...DEFAULT_PROFILE }, leaves: [], wishes: [], chat: [], trips: [], plan: null, planInput: null, dayplan: null, profileSaved: false };
 const store = { mode: "local", db: null, uid: null };
 
 function allInterests() { return [...new Set([...DEFAULT_INTERESTS, ...(state.profile.customInterests || [])])]; }
@@ -424,6 +478,8 @@ function allInterests() { return [...new Set([...DEFAULT_INTERESTS, ...(state.pr
 async function initStore() {
   const local = safeLS.get("rk-data");
   if (local) applyData(local);
+  const localChat = safeLS.get("rk-chat");
+  if (Array.isArray(localChat)) state.chat = localChat;
   renderAll();
   if (!window.claude?.use) { renderStoreMode(); return; }
   try {
@@ -433,6 +489,8 @@ async function initStore() {
       store.db = db; store.uid = id; store.mode = "db";
       const snap = await profileRef().get();
       if (snap.exists) applyData(snap.data());
+      const cs = await chatRef().get();
+      if (cs.exists && Array.isArray(cs.data().messages)) state.chat = cs.data().messages;
       const ts = await tripsRef().get();
       state.trips = ts.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.savedAt || "").localeCompare(a.savedAt || ""));
       renderAll();
@@ -442,15 +500,17 @@ async function initStore() {
 }
 const profileRef = () => store.db.doc(`data/users/${store.uid}/profile`);
 const tripsRef = () => profileRef().collection("trips");
+const chatRef = () => store.db.doc(`data/users/${store.uid}/chat`);
 function applyData(d) {
   if (!d) return;
   if (d.profile) { state.profile = { ...DEFAULT_PROFILE, ...d.profile }; state.profileSaved = true; }
   if (Array.isArray(d.leaves)) state.leaves = d.leaves;
+  if (Array.isArray(d.wishes)) state.wishes = d.wishes;
   if (Array.isArray(d.trips) && store.mode === "local") state.trips = d.trips;
 }
 let writing = Promise.resolve();
 function persist() {
-  const data = { profile: state.profile, leaves: state.leaves };
+  const data = { profile: state.profile, leaves: state.leaves, wishes: state.wishes };
   safeLS.set("rk-data", { ...data, trips: store.mode === "local" ? state.trips : [] });
   if (store.mode === "db") writing = writing.then(() => profileRef().set(data)).catch(e => { console.warn(e); toast("Kunde inte spara i kontot. Ändringen finns kvar i webbläsaren."); });
   return writing;
@@ -467,7 +527,14 @@ async function deleteTrip(id) {
   renderSaved();
 }
 function renderStoreMode() {
-  $("#storeMode").textContent = store.mode === "db" ? "Sparas i ditt Claude-konto, privat för dig" : "Sparas bara i den här webbläsaren";
+  const t = store.mode === "db" ? "Sparas i ditt Claude-konto, privat för dig" : "Sparas bara i den här webbläsaren";
+  $("#storeMode").textContent = t; $("#storeMode2").textContent = t;
+}
+let chatWriting = Promise.resolve();
+function persistChat() {
+  const messages = state.chat.slice(-40).map(({ snapshot, ...m }) => m);
+  safeLS.set("rk-chat", messages);
+  if (store.mode === "db") chatWriting = chatWriting.then(() => chatRef().set({ messages })).catch(e => console.warn(e));
 }
 
 /* ---------- Claude ---------- */
@@ -496,6 +563,8 @@ function profileText() {
     `Boende: ${p.stay}, minst ${p.stars} stjärnor, läge: ${p.area}`,
     p.loyalty && `Lojalitetsprogram: ${p.loyalty}`,
     `Tempo: ${p.pace}`, p.diet && `Kost: ${p.diet}`, p.notes && `Övrigt: ${p.notes}`,
+    (p.memories || []).length && `Att komma ihåg: ${p.memories.map(m => m.text).join("; ")}`,
+    state.wishes.length && `Resdrömmar och planer: ${state.wishes.map(w => [w.title, w.destination, w.when].filter(Boolean).join(", ")).join("; ")}`,
   ].filter(Boolean).join("\n");
 }
 
@@ -538,7 +607,7 @@ function linkSet({ origin, dest, iata, from, to, adults, children }) {
 function renderFlap(origin, dest, from, to) {
   const f = $("#flap"); f.replaceChildren();
   const o = (origin || state.profile.home || "ARN").toUpperCase().slice(0, 3);
-  const d = (dest || "???").toUpperCase().slice(0, 3);
+  const d = (dest || "???").toUpperCase().slice(0, 12);
   f.append(h("span", { class: "cell" }, o), h("span", { class: "arrow", "aria-hidden": "true" }, "→"), h("span", { class: "cell" }, d));
   if (from && to) f.append(h("span", { class: "when" }, `${fmtDay(from)}\n– ${fmtDay(to)}`));
 }
@@ -572,7 +641,7 @@ function updatePlanLinks() {
   const iata = state.plan && state.planInput?.dest === i.dest ? state.plan.destinationIata : "";
   box.append(h("div", { class: "sechead" }, h("h3", null, "Sök och boka direkt"), h("span", { class: "small muted" }, "Förifyllda länkar, du betalar hos bolaget")),
     linkSet({ origin: state.profile.home, dest: i.dest, iata, from: i.from, to: i.to, adults: state.profile.adults, children: state.profile.children }));
-  renderFlap(state.profile.home, iata || (/^[A-Za-z]{3}$/.test(i.dest) ? i.dest : i.dest.slice(0, 3)), i.from, i.to);
+  renderFlap(state.profile.home, iata || i.dest, i.from, i.to);
 }
 
 function planPrompt(i) {
@@ -895,7 +964,7 @@ function renderBridges() {
 function addLeave(l) {
   if (state.leaves.some(x => x.from === l.from && x.to === l.to)) { toast("Ledigheten finns redan"); return; }
   state.leaves.push({ id: uid(), ...l }); state.leaves.sort((a, b) => a.from.localeCompare(b.from));
-  persist(); renderLeaves(); periodOptions(); toast("Ledigheten är sparad");
+  persist(); renderLeaves(); renderKnowledge(); periodOptions(); toast("Ledigheten är sparad");
 }
 function goDiscover(from, to) {
   selectTab("discover");
@@ -910,7 +979,7 @@ function renderLeaves() {
     const vac = (() => { let v = 0; for (let k = 0; k <= daysBetween(l.from, l.to); k++) if (!isOff(addDays(parse(l.from), k))) v++; return v; })();
     const confirmBox = h("span", { class: "confirm", hidden: true },
       h("span", { class: "small" }, "Ta bort?"),
-      h("button", { class: "btn sm", type: "button", onclick: () => { state.leaves = state.leaves.filter(x => x.id !== l.id); persist(); renderLeaves(); periodOptions(); } }, "Ja"),
+      h("button", { class: "btn sm", type: "button", onclick: () => { state.leaves = state.leaves.filter(x => x.id !== l.id); persist(); renderLeaves(); renderKnowledge(); periodOptions(); } }, "Ja"),
       h("button", { class: "btn sm ghost", type: "button", onclick: () => { confirmBox.hidden = true; delBtn.hidden = false; } }, "Nej"));
     const delBtn = h("button", { class: "btn sm ghost", type: "button", onclick: () => { confirmBox.hidden = false; delBtn.hidden = true; } }, "Ta bort");
     return h("div", { class: "leave" },
@@ -968,6 +1037,7 @@ function saveProfile(ev) {
   };
   state.profileSaved = true;
   persist().then(() => { $("#profSaved").textContent = "Sparat"; toast("Profilen är sparad"); });
+  renderKnowledge();
   planInterests = [...state.profile.interests]; discInterests = [...state.profile.interests];
   renderInterestChips($("#pInterests"), planInterests); renderInterestChips($("#dInterests"), discInterests);
   updatePlanLinks();
@@ -978,6 +1048,289 @@ function addCustomInterest() {
   if (!profInterests.includes(v)) profInterests.push(v);
   $("#fNewInterest").value = "";
   renderInterestChips($("#fInterests"), profInterests);
+}
+
+/* ---------- ASSISTENT ---------- */
+const ENUMS = {
+  stops: ["0", "1", "2"], time: ["any", "morgon", "dag", "kväll"], bag: ["handbagage", "incheckat"],
+  stay: ["hotell", "lägenhet", "boutique", "vandrarhem", "vad som helst"], stars: ["2", "3", "4", "5"],
+  area: ["centralt", "lugnt", "nära stranden", "nära evenemanget"], pace: ["lugnt", "lagom", "intensivt"],
+};
+const FIELD_LABEL = { home: "Hemflygplats", alt: "Alternativa flygplatser", adults: "Vuxna", children: "Barn", budget: "Budget", stops: "Byten",
+  time: "Avgångstid", bag: "Bagage", stay: "Boende", stars: "Standard", area: "Läge", loyalty: "Lojalitetsprogram", pace: "Tempo", diet: "Kost" };
+const VALUE_LABEL = { stops: { "0": "bara direktflyg", "1": "max 1 byte", "2": "spelar ingen roll" }, time: { any: "spelar ingen roll" }, stars: { "2": "2 stjärnor", "3": "3 stjärnor", "4": "4 stjärnor", "5": "5 stjärnor" } };
+const showVal = (k, v) => k === "budget" ? kr(v) : (VALUE_LABEL[k]?.[v] ?? String(v));
+const EXAMPLES = [
+  "Jag bor i Göteborg och flyger helst direkt, gärna på morgonen",
+  "Vi är två vuxna och ett barn på 6 år",
+  "Jag vill springa ett maraton i Europa nästa höst",
+  "Jag är ledig vecka 28 till 31 nästa sommar",
+  "Jag äter vegetariskt och vill kunna träna på hotellet",
+];
+
+function isoWeek(d) {
+  const x = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = x.getUTCDay() || 7; x.setUTCDate(x.getUTCDate() + 4 - day);
+  const y0 = new Date(Date.UTC(x.getUTCFullYear(), 0, 1));
+  return Math.ceil(((x - y0) / 86400000 + 1) / 7);
+}
+function week1Monday(y) { const j4 = new Date(y, 0, 4); return iso(addDays(j4, -((j4.getDay() || 7) - 1))); }
+
+function knowledgeJson() {
+  const p = state.profile;
+  const fields = Object.fromEntries(Object.keys(FIELD_LABEL).map(k => [k, p[k]]));
+  return JSON.stringify({
+    profile: fields, interests: p.interests,
+    memories: (p.memories || []).map(m => ({ id: m.id, text: m.text })),
+    leaves: state.leaves.map(l => ({ id: l.id, label: l.label, from: l.from, to: l.to })),
+    plans: state.wishes.map(w => ({ id: w.id, title: w.title, destination: w.destination, from: w.from, to: w.to, when: w.when, interest: w.interest, notes: w.notes })),
+  });
+}
+
+function chatRules() {
+  const y = TODAY.getFullYear();
+  return `Du är reseassistenten i appen Resekompassen för en resenär i Sverige. Användaren berättar om sina planer och preferenser i fritext, ofta dikterat och med stavfel. Tolka vad som ska sparas och svara kort och vänligt på svenska.
+Dagens datum: ${iso(TODAY)} (${TODAY.toLocaleDateString("sv-SE", { weekday: "long" })}), ISO-vecka ${isoWeek(TODAY)}. Måndag vecka 1: ${y}: ${week1Monday(y)}, ${y + 1}: ${week1Monday(y + 1)}, ${y + 2}: ${week1Monday(y + 2)}.
+Sparat just nu (JSON): ${knowledgeJson()}
+Fördefinierade intressen: ${DEFAULT_INTERESTS.join(", ")}. Använd de namnen när de passar, annars ett kort eget namn.
+
+Regler:
+- Spara bara det användaren säger eller tydligt menar. Är något viktigt oklart (t.ex. vilket år eller vilken stad), ställ en kort fråga och spara inte det osäkra.
+- Räkna om relativa tider ("nästa sommar", "v. 28", "påsklovet") till exakta datum. En vecka är måndag–söndag. Skollov skiljer sig mellan kommuner: säg vilken vecka du antog.
+- Profilfält ändras med "profile". Flygplatser anges som IATA-kod (Göteborg = GOT, Stockholm = ARN, Malmö = MMX eller CPH).
+- Preferenser som inte passar ett profilfält sparas med "remember" som en kort mening i tredje person, t.ex. "Vill kunna träna på hotellet".
+- Resdrömmar och planer ("vill till Japan någon gång", "springa Berlin maraton 2027") sparas med "add_plan". Ledig tid sparas med "add_leave".
+- Ändra befintliga poster via deras id i stället för att skapa dubbletter. Ta bort när användaren säger att något inte gäller längre.
+- Vill användaren få fram en konkret resa nu, lägg till "open_planner" med resmål och datum. Vill hen hitta evenemang för en period, lägg till "discover".
+- "reply" bekräftar kort vad du sparade (1–3 meningar) och får avslutas med en följdfråga som fyller i det som saknas i profilen. Inga långa listor. Allmänna resefrågor får du besvara kort.
+
+Svara ENDAST med JSON: {"reply":"...","actions":[...]}. Tom lista om inget ska sparas. Tillåtna actions:
+{"type":"profile","fields":{"home":"GOT","alt":"CPH, ARN","adults":2,"children":1,"budget":20000,"stops":"0|1|2","time":"any|morgon|dag|kväll","bag":"handbagage|incheckat","stay":"hotell|lägenhet|boutique|vandrarhem|vad som helst","stars":"2|3|4|5","area":"centralt|lugnt|nära stranden|nära evenemanget","loyalty":"text","pace":"lugnt|lagom|intensivt","diet":"text"}} (bara fält som ändras; stops 0 = bara direktflyg)
+{"type":"add_interests","items":["..."]}
+{"type":"remove_interests","items":["..."]}
+{"type":"remember","text":"..."}
+{"type":"forget","id":"..."}
+{"type":"add_leave","label":"...","from":"YYYY-MM-DD","to":"YYYY-MM-DD"}
+{"type":"remove_leave","id":"..."}
+{"type":"add_plan","title":"...","destination":"stad eller land, kan vara tomt","from":"YYYY-MM-DD eller tomt","to":"YYYY-MM-DD eller tomt","when":"tidpunkt i ord","interest":"...","notes":"..."}
+{"type":"update_plan","id":"...","title":"...","destination":"...","from":"...","to":"...","when":"...","interest":"...","notes":"..."}
+{"type":"remove_plan","id":"..."}
+{"type":"open_planner","destination":"...","from":"YYYY-MM-DD","to":"YYYY-MM-DD"}
+{"type":"discover","from":"YYYY-MM-DD","to":"YYYY-MM-DD"}`;
+}
+
+const str = (v, max = 200) => (v == null ? "" : String(v).trim().slice(0, max));
+function applyActions(actions) {
+  const changes = [], buttons = [];
+  const p = state.profile;
+  for (const a of Array.isArray(actions) ? actions : []) {
+    if (!a || typeof a !== "object") continue;
+    try {
+      switch (a.type) {
+        case "profile": {
+          for (const [k, raw] of Object.entries(a.fields || {})) {
+            let v;
+            if (ENUMS[k]) { v = String(raw); if (!ENUMS[k].includes(v)) continue; }
+            else if (k === "home") { v = str(raw, 3).toUpperCase(); if (!/^[A-Z]{3}$/.test(v)) continue; }
+            else if (k === "adults") v = Math.min(9, Math.max(1, Math.round(+raw) || 1));
+            else if (k === "children") v = Math.min(9, Math.max(0, Math.round(+raw) || 0));
+            else if (k === "budget") { v = Math.max(0, Math.round(+raw) || 0); if (!v) continue; }
+            else if (k === "alt") v = str(raw, 60).toUpperCase();
+            else if (k === "loyalty" || k === "diet") v = str(raw, 120);
+            else continue;
+            if (p[k] === v) continue;
+            p[k] = v; changes.push(`${FIELD_LABEL[k]}: ${showVal(k, v)}`);
+          }
+          break;
+        }
+        case "add_interests":
+          for (const raw of a.items || []) {
+            const v = str(raw, 40); if (!v) continue;
+            const known = allInterests().find(x => x.toLowerCase() === v.toLowerCase());
+            const name = known || v;
+            if (!known) p.customInterests = [...(p.customInterests || []), name];
+            if (!p.interests.includes(name)) { p.interests = [...p.interests, name]; changes.push(`Intresse: ${name}`); }
+          }
+          break;
+        case "remove_interests":
+          for (const raw of a.items || []) {
+            const v = str(raw, 40).toLowerCase();
+            const hit = p.interests.find(x => x.toLowerCase() === v);
+            if (hit) { p.interests = p.interests.filter(x => x !== hit); changes.push(`Tog bort intresse: ${hit}`); }
+          }
+          break;
+        case "remember": {
+          const v = str(a.text, 240); if (!v) break;
+          p.memories = [...(p.memories || []), { id: uid(), text: v }]; changes.push(`Kommer ihåg: ${v}`);
+          break;
+        }
+        case "forget": {
+          const m = (p.memories || []).find(x => x.id === a.id);
+          if (m) { p.memories = p.memories.filter(x => x.id !== a.id); changes.push(`Glömde: ${m.text}`); }
+          break;
+        }
+        case "add_leave":
+          if (validIso(a.from) && validIso(a.to) && a.to >= a.from && !state.leaves.some(x => x.from === a.from && x.to === a.to)) {
+            state.leaves = [...state.leaves, { id: uid(), label: str(a.label, 60), from: a.from, to: a.to }].sort((x, y) => x.from.localeCompare(y.from));
+            changes.push(`Ledighet: ${str(a.label, 60) || "ny"} ${fmtRange(a.from, a.to)}`);
+          }
+          break;
+        case "remove_leave": {
+          const l = state.leaves.find(x => x.id === a.id);
+          if (l) { state.leaves = state.leaves.filter(x => x.id !== a.id); changes.push(`Tog bort ledighet: ${l.label || fmtRange(l.from, l.to)}`); }
+          break;
+        }
+        case "add_plan":
+        case "update_plan": {
+          const fields = {
+            title: str(a.title, 80), destination: str(a.destination, 80), when: str(a.when, 80), interest: str(a.interest, 40), notes: str(a.notes, 240),
+            from: validIso(a.from) ? a.from : "", to: validIso(a.to) ? a.to : "",
+          };
+          if (a.type === "update_plan") {
+            const w = state.wishes.find(x => x.id === a.id); if (!w) break;
+            for (const [k, v] of Object.entries(fields)) if (v) w[k] = v;
+            state.wishes = [...state.wishes]; changes.push(`Uppdaterade plan: ${w.title}`);
+          } else {
+            if (!fields.title) fields.title = fields.destination || "Resplan";
+            state.wishes = [...state.wishes, { id: uid(), ...fields, createdAt: iso(TODAY) }]; changes.push(`Ny plan: ${fields.title}`);
+          }
+          break;
+        }
+        case "remove_plan": {
+          const w = state.wishes.find(x => x.id === a.id);
+          if (w) { state.wishes = state.wishes.filter(x => x.id !== a.id); changes.push(`Tog bort plan: ${w.title}`); }
+          break;
+        }
+        case "open_planner":
+          if (str(a.destination)) buttons.push({ kind: "plan", destination: str(a.destination, 80), from: validIso(a.from) ? a.from : "", to: validIso(a.to) ? a.to : "" });
+          break;
+        case "discover":
+          if (validIso(a.from) && validIso(a.to)) buttons.push({ kind: "discover", from: a.from, to: a.to });
+          break;
+      }
+    } catch (e) { console.warn("action", a, e); }
+  }
+  return { changes, buttons };
+}
+
+function openPlanner(dest, from, to) {
+  $("#pDest").value = dest || "";
+  if (validIso(from) && validIso(to) && to > from) { $("#pFrom").value = from; $("#pTo").value = to; }
+  state.plan = null; state.planInput = null;
+  planInterests = [...state.profile.interests]; renderInterestChips($("#pInterests"), planInterests);
+  $("#planOut").replaceChildren(); selectTab("plan"); updatePlanLinks();
+  toast("Resan är ifylld. Tryck Hitta resa.");
+}
+function actionButton(b) {
+  if (b.kind === "plan") return h("button", { class: "btn sm primary", type: "button", onclick: () => openPlanner(b.destination, b.from, b.to) },
+    `Planera ${b.destination}${b.from && b.to ? " " + fmtRange(b.from, b.to) : ""}`);
+  if (b.kind === "discover") return h("button", { class: "btn sm", type: "button", onclick: () => goDiscover(b.from, b.to) }, `Sök evenemang ${fmtRange(b.from, b.to)}`);
+  return null;
+}
+
+let chatCtl = null, chatPending = false;
+function renderChat() {
+  const log = $("#chatLog"); if (!log) return;
+  const greeting = h("div", { class: "msg bot" }, h("div", { class: "bubble" },
+    "Hej! Berätta om dig som resenär: var du bor, vem du reser med, vad du gillar, när du är ledig och vart du drömmer om att åka. Jag sparar det i din profil och använder det när jag letar flyg, boende och evenemang."));
+  const lastChange = state.chat.map((m, i) => (m.snapshot ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
+  const items = state.chat.map((m, i) => {
+    if (m.role === "user") return h("div", { class: "msg user" }, h("div", { class: "bubble" }, m.text));
+    const undoBtn = i === lastChange && m.snapshot ? h("button", { class: "btn sm ghost", type: "button", onclick: () => undo(i) }, "Ångra") : null;
+    return h("div", { class: "msg bot" + (m.error ? " err" : "") },
+      h("div", { class: "bubble" }, m.text),
+      (m.changes || []).length ? h("div", { class: "saved" }, h("span", { class: "label" }, m.undone ? "Ångrat" : "Sparat"), m.changes.map(c => h("span", { class: "s", style: m.undone ? "text-decoration:line-through;opacity:.6" : null }, c)), undoBtn) : null,
+      (m.buttons || []).length ? h("div", { class: "actions" }, m.buttons.map(actionButton)) : null);
+  });
+  const pending = chatPending ? h("div", { class: "msg bot" }, h("div", { class: "bubble" }, h("span", { class: "spinner", style: "display:inline-block;vertical-align:middle;margin-right:8px", "aria-hidden": "true" }), "Tänker…")) : null;
+  log.replaceChildren(greeting, ...items, pending || "");
+  log.scrollTop = log.scrollHeight;
+  $("#chatExamples").hidden = state.chat.length > 2;
+}
+function undo(i) {
+  const m = state.chat[i]; if (!m?.snapshot) return;
+  const s = JSON.parse(m.snapshot);
+  state.profile = s.profile; state.leaves = s.leaves; state.wishes = s.wishes;
+  m.snapshot = null; m.undone = true;
+  persist(); persistChat(); renderAll(); toast("Ändringarna är ångrade");
+}
+
+async function sendChat(ev) {
+  ev?.preventDefault();
+  const input = $("#chatInput"); const text = input.value.trim();
+  if (!text || chatPending) return;
+  const sample = await getSample();
+  state.chat.push({ role: "user", text });
+  input.value = ""; autoGrow();
+  if (!sample) { state.chat.push({ role: "assistant", text: "Claude är inte tillgängligt i den här vyn, så jag kan inte tolka meddelandet. Du kan fylla i profilen under fliken Profil.", error: true }); renderChat(); return; }
+  chatPending = true; renderChat();
+  chatCtl = new AbortController(); busy($("#chatSend"), $("#chatStop"), true);
+  const history = state.chat.slice(-13, -1).filter(m => !m.error).map(m => ({
+    role: m.role === "user" ? "user" : "assistant",
+    content: m.role === "user" ? m.text : m.text + ((m.changes || []).length ? `\n[Sparat: ${m.changes.join("; ")}]` : ""),
+  }));
+  const turns = [{ role: "user", content: chatRules() }, ...history, { role: "user", content: text }];
+  try {
+    const r = await sample.json(turns, { signal: chatCtl.signal, cache: false });
+    if (!r || typeof r !== "object") throw { code: "invalid_json" };
+    const snapshot = JSON.stringify({ profile: state.profile, leaves: state.leaves, wishes: state.wishes });
+    const { changes, buttons } = applyActions(r.actions);
+    const msg = { role: "assistant", text: str(r.reply, 2000) || (changes.length ? "Klart, det är sparat." : "Okej."), changes, buttons };
+    if (changes.length) { msg.snapshot = snapshot; state.profileSaved = true; persist(); }
+    state.chat.push(msg);
+    if (changes.length) renderAll();
+  } catch (e) {
+    if (e?.code !== "cancelled") state.chat.push({ role: "assistant", text: errText(e), error: true });
+  } finally {
+    chatPending = false; busy($("#chatSend"), $("#chatStop"), false);
+    persistChat(); renderChat();
+  }
+}
+function autoGrow() { const t = $("#chatInput"); t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 160) + "px"; }
+
+function delControl(onYes, question = "Ta bort?") {
+  const wrap = h("span", { class: "confirm" });
+  const ask = h("button", { class: "x", type: "button", "aria-label": "Ta bort", title: "Ta bort", onclick: () => { ask.hidden = true; box.hidden = false; } }, "×");
+  const box = h("span", { class: "confirm", hidden: true }, h("span", { class: "small" }, question),
+    h("button", { class: "btn sm", type: "button", onclick: onYes }, "Ja"),
+    h("button", { class: "btn sm ghost", type: "button", onclick: () => { box.hidden = true; ask.hidden = false; } }, "Nej"));
+  wrap.append(ask, box); return wrap;
+}
+function renderKnowledge() {
+  const box = $("#knowledge"); if (!box) return;
+  const p = state.profile;
+  const save = () => { persist(); renderAll(); };
+  const facts = [
+    ["Utgår från", [p.home, p.alt].filter(Boolean).join(", ")],
+    ["Resenärer", `${p.adults} ${p.adults == 1 ? "vuxen" : "vuxna"}${p.children ? `, ${p.children} barn` : ""}`],
+    ["Budget", p.budget ? kr(p.budget) + " per resa" : ""],
+    ["Flyg", [showVal("stops", p.stops), p.time !== "any" && `avgång ${p.time}`, p.bag].filter(Boolean).join(", ")],
+    ["Boende", `${p.stay}, ${p.stars}+ stjärnor, ${p.area}`],
+    ["Tempo", p.pace], ["Kost", p.diet], ["Bonus", p.loyalty],
+  ].filter(([, v]) => v);
+  const cards = [
+    h("div", { class: "kcard" }, h("div", { class: "sechead" }, h("h3", null, "Resprofil"), !state.profileSaved && h("span", { class: "tag example" }, "Exempel")),
+      h("dl", { class: "kv" }, facts.map(([k, v]) => [h("dt", null, k), h("dd", null, v)])),
+      h("div", { class: "chips" }, p.interests.map(x => h("span", { class: "chip static" }, x)))),
+    h("div", { class: "kcard" }, h("h3", null, "Resplaner och drömmar"),
+      state.wishes.length ? h("div", { class: "klist" }, state.wishes.map(w => h("div", null,
+        h("div", { style: "min-width:0" }, h("strong", null, w.title), h("div", { class: "small muted" }, [w.destination !== w.title && w.destination, w.from && w.to ? fmtRange(w.from, w.to) : w.when, w.interest].filter(Boolean).join(" · ")), w.notes && h("div", { class: "small" }, w.notes)),
+        h("span", { class: "actions" },
+          w.destination && h("button", { class: "btn sm", type: "button", onclick: () => openPlanner(w.destination, w.from, w.to) }, "Planera"),
+          delControl(() => { state.wishes = state.wishes.filter(x => x.id !== w.id); save(); })))))
+        : h("p", { class: "small muted" }, "Inga planer än. Skriv t.ex. ”Jag vill se Formel 1 i Monza nästa år”.")),
+    h("div", { class: "kcard" }, h("h3", null, "Kommer ihåg"),
+      (p.memories || []).length ? h("div", { class: "klist" }, p.memories.map(m => h("div", null, h("span", { style: "min-width:0" }, m.text),
+        delControl(() => { p.memories = p.memories.filter(x => x.id !== m.id); save(); }))))
+        : h("p", { class: "small muted" }, "Sådant som inte passar i profilen, t.ex. ”undviker nattflyg” eller ”vill ha gym på hotellet”.")),
+    h("div", { class: "kcard" }, h("h3", null, "Ledigheter"),
+      state.leaves.filter(l => l.to >= iso(TODAY)).length ? h("div", { class: "klist" }, state.leaves.filter(l => l.to >= iso(TODAY)).map(l => h("div", null,
+        h("div", { style: "min-width:0" }, h("strong", null, l.label || "Ledighet"), h("div", { class: "small muted" }, fmtRange(l.from, l.to))),
+        h("span", { class: "actions" }, h("button", { class: "btn sm", type: "button", onclick: () => goDiscover(l.from, l.to) }, "Evenemang"),
+          delControl(() => { state.leaves = state.leaves.filter(x => x.id !== l.id); save(); periodOptions(); })))))
+        : h("p", { class: "small muted" }, "Berätta när du är ledig, t.ex. ”vecka 7 och hela juli”.")),
+  ];
+  box.replaceChildren(...cards);
 }
 
 /* ---------- Flikar ---------- */
@@ -1000,6 +1353,7 @@ function renderAll() {
   renderInterestChips($("#pInterests"), planInterests);
   renderInterestChips($("#dInterests"), discInterests);
   renderBridges(); renderLeaves(); renderSaved(); periodOptions(); updatePlanLinks(); renderStoreMode();
+  renderKnowledge(); renderChat();
 }
 
 document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => selectTab(t.dataset.tab)));
@@ -1017,12 +1371,17 @@ $("#leaveForm").addEventListener("submit", e => {
   addLeave({ label: $("#lLabel").value.trim(), from, to }); e.target.reset();
 });
 $("#profForm").addEventListener("submit", saveProfile);
+$("#chatForm").addEventListener("submit", sendChat);
+$("#chatStop").addEventListener("click", () => chatCtl?.abort());
+$("#chatInput").addEventListener("input", autoGrow);
+$("#chatInput").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(); } });
+$("#chatExamples").replaceChildren(...EXAMPLES.map(x => h("button", { class: "chip", type: "button", onclick: () => { $("#chatInput").value = x; autoGrow(); $("#chatInput").focus(); } }, x)));
 $("#fAddInterest").addEventListener("click", addCustomInterest);
 $("#fNewInterest").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addCustomInterest(); } });
 
 const [df, dt] = defaultTripDates();
 $("#pDest").value = "Barcelona"; $("#pFrom").value = df; $("#pTo").value = dt;
-selectTab(safeLS.get("rk-tab") || "plan");
+selectTab(safeLS.get("rk-tab") || "chat");
 initStore();
 })();
 </script>
