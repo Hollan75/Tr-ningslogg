@@ -20,7 +20,8 @@ export type RootStackParamList = {
   Tabs: undefined;
   ExerciseDetail: { exerciseId: string };
   CreateTemplate: { templateId?: number };
-  ActiveWorkout: { sessionId: number; sessionName: string };
+  // Without sessionId the workout is opened but not started yet
+  ActiveWorkout: { sessionId?: number; templateId?: number; sessionName: string };
   SessionDetail: { sessionId: number };
   Settings: undefined;
 };

@@ -15,7 +15,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { COLORS, RADIUS } from '../theme';
 import { getStats, getSessions, getTemplates, getActiveSession } from '../database';
 import ResumeBanner from '../components/ResumeBanner';
-import { startWorkout } from '../utils/workout';
+import { openWorkout, startWorkout } from '../utils/workout';
 import { durationMin, fmtRelativeDate } from '../utils/format';
 import type { WorkoutSession, WorkoutTemplate } from '../types';
 import type { RootStackParamList } from '../navigation/AppNavigator';
@@ -104,7 +104,7 @@ export default function HomeScreen() {
           <TouchableOpacity
             key={t.id}
             style={s.tplRow}
-            onPress={() => startWorkout(navigation, t.id, t.name)}
+            onPress={() => openWorkout(navigation, t.id, t.name)}
             activeOpacity={0.85}
           >
             <View style={s.tplIcon}>
@@ -117,13 +117,15 @@ export default function HomeScreen() {
                 {t.last_used ? ` · senast ${fmtRelativeDate(t.last_used).toLowerCase()}` : ''}
               </Text>
             </View>
-            <Ionicons name="play-circle" size={30} color={COLORS.accent} />
+            <TouchableOpacity onPress={() => startWorkout(navigation, t.id, t.name)} hitSlop={8}>
+              <Ionicons name="play-circle" size={34} color={COLORS.accent} />
+            </TouchableOpacity>
           </TouchableOpacity>
         ))}
         <View style={s.quickRow}>
           <TouchableOpacity
             style={[s.quickBtn, s.quickPrimary]}
-            onPress={() => startWorkout(navigation, undefined, 'Fritt pass')}
+            onPress={() => openWorkout(navigation, undefined, 'Fritt pass')}
           >
             <Ionicons name="flash" size={18} color="#fff" />
             <Text style={s.quickPrimaryText}>Tomt pass</Text>

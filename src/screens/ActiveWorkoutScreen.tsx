@@ -30,6 +30,8 @@ import {
   getSessionById,
   getSessionSets,
   getPreviousPerformance,
+  getActiveSession,
+  startSession,
 } from '../database';
 import ExercisePicker from '../components/ExercisePicker';
 import ExerciseHistoryList from '../components/ExerciseHistoryList';
@@ -125,8 +127,12 @@ function useRestTimer() {
 export default function ActiveWorkoutScreen() {
   const navigation = useNavigation<Nav>();
   const { params } = useRoute<RouteP>();
-  const { sessionId, sessionName } = params;
+  const { sessionName, templateId } = params;
 
+  // null until the workout is started (opened via "open" instead of "start")
+  const [sessionId, setSessionId] = useState<number | null>(params.sessionId ?? null);
+  const sessionIdRef = useRef<number | null>(params.sessionId ?? null);
+  const startingRef = useRef<Promise<number | null> | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const elapsed = useElapsed(startedAt);
   const rest = useRestTimer();
@@ -136,6 +142,8 @@ export default function ActiveWorkoutScreen() {
   const [showPicker, setShowPicker] = useState(false);
   const [historyFor, setHistoryFor] = useState<ExState | null>(null);
   const [finishing, setFinishing] = useState(false);
+  const [showFinish, setShowFinish] = useState(false);
+  const [includePending, setIncludePending] = useState(true);
   const busy = useRef<Set<string>>(new Set());
   const exercisesRef = useRef<ExState[]>([]);
   exercisesRef.current = exercises;
@@ -143,18 +151,20 @@ export default function ActiveWorkoutScreen() {
   // Load template + any sets already logged (resuming an unfinished session)
   useEffect(() => {
     async function load() {
-      const session = await getSessionById(sessionId);
-      if (!session) {
-        Alert.alert('Passet finns inte längre');
-        navigation.goBack();
-        return;
+      let tplId = templateId ?? null;
+      let logged: SessionSet[] = [];
+      if (params.sessionId) {
+        const session = await getSessionById(params.sessionId);
+        if (!session) {
+          Alert.alert('Passet finns inte längre');
+          navigation.goBack();
+          return;
+        }
+        setStartedAt(new Date(session.started_at).getTime());
+        tplId = session.template_id;
+        logged = await getSessionSets(params.sessionId);
       }
-      setStartedAt(new Date(session.started_at).getTime());
-
-      const [tes, logged] = await Promise.all([
-        session.template_id ? getTemplateExercises(session.template_id) : Promise.resolve([]),
-        getSessionSets(sessionId),
-      ]);
+      const tes = tplId ? await getTemplateExercises(tplId) : [];
 
       const list: ExState[] = tes.map((te, i) => ({
         key: `t${i}-${te.exercise_id}`,
@@ -205,7 +215,7 @@ export default function ActiveWorkoutScreen() {
       // Previous performance for each exercise
       await Promise.all(
         list.map(async ex => {
-          ex.prev = await getPreviousPerformance(ex.exerciseId, sessionId);
+          ex.prev = await getPreviousPerformance(ex.exerciseId, params.sessionId ?? -1);
           // Free exercises: plan as many sets as last time
           if (ex.targetSets == null && ex.prev.length > ex.rows.length) {
             while (ex.rows.length < ex.prev.length) ex.rows.push(newRow());
@@ -221,7 +231,40 @@ export default function ActiveWorkoutScreen() {
       setLoading(false);
       Alert.alert('Kunde inte ladda passet', err instanceof Error ? err.message : String(err));
     });
-  }, [sessionId]);
+  }, []);
+
+  // Creates the session the first time it is needed (Starta-button or first checked set)
+  function ensureStarted(): Promise<number | null> {
+    if (sessionIdRef.current) return Promise.resolve(sessionIdRef.current);
+    if (!startingRef.current) {
+      startingRef.current = (async () => {
+        const active = await getActiveSession();
+        if (active) {
+          const discard = await new Promise<boolean>(resolve =>
+            Alert.alert(
+              'Pågående pass',
+              `Du har redan ett oavslutat pass (${active.template_name ?? 'Fritt pass'}). Kasta det och starta det här?`,
+              [
+                { text: 'Avbryt', style: 'cancel', onPress: () => resolve(false) },
+                { text: 'Kasta & starta', style: 'destructive', onPress: () => resolve(true) },
+              ],
+              { cancelable: true, onDismiss: () => resolve(false) }
+            )
+          );
+          if (!discard) return null;
+          await cancelSession(active.id);
+        }
+        const id = await startSession(templateId);
+        sessionIdRef.current = id;
+        setSessionId(id);
+        setStartedAt(Date.now());
+        return id;
+      })().finally(() => {
+        startingRef.current = null;
+      });
+    }
+    return startingRef.current;
+  }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
   // Suggested values for a row: last time's matching set → template target → previous row
@@ -289,8 +332,10 @@ export default function ActiveWorkoutScreen() {
         Alert.alert('Ange reps', 'Fyll i antal repetitioner för setet.');
         return;
       }
+      const sid = await ensureStarted();
+      if (!sid) return;
       const dbId = await addSessionSet(
-        sessionId,
+        sid,
         ex.exerciseId,
         idx + 1,
         Math.round(reps),
@@ -322,7 +367,7 @@ export default function ActiveWorkoutScreen() {
 
   async function handleAddExercise(exercise: Exercise) {
     setShowPicker(false);
-    const prev = await getPreviousPerformance(exercise.id, sessionId);
+    const prev = await getPreviousPerformance(exercise.id, sessionIdRef.current ?? -1);
     const rowCount = Math.max(prev.length, 3);
     const ex: ExState = {
       key: `a${Date.now()}-${exercise.id}`,
@@ -367,6 +412,8 @@ export default function ActiveWorkoutScreen() {
   );
 
   async function finish(logPending: boolean) {
+    const sid = sessionIdRef.current;
+    if (!sid) return;
     setFinishing(true);
     try {
       for (const ex of exercises) {
@@ -381,54 +428,36 @@ export default function ActiveWorkoutScreen() {
             await updateSessionSet(row.dbId, n, reps != null ? Math.round(reps) : null, weight);
           } else if (logPending && row.reps.trim() !== '' && reps != null) {
             n += 1;
-            await addSessionSet(sessionId, ex.exerciseId, n, Math.round(reps), weight, false);
+            await addSessionSet(sid, ex.exerciseId, n, Math.round(reps), weight, false);
           }
         }
       }
-      await completeSession(sessionId);
-      navigation.replace('SessionDetail', { sessionId });
+      await completeSession(sid);
+      setShowFinish(false);
+      navigation.replace('SessionDetail', { sessionId: sid });
     } catch (err) {
       setFinishing(false);
       Alert.alert('Kunde inte spara passet', err instanceof Error ? err.message : String(err));
     }
   }
 
-  function handleFinish() {
-    if (loggedCount === 0 && pendingFilled === 0) {
-      Alert.alert('Inga set loggade', 'Bocka av minst ett set innan du avslutar passet.');
-      return;
-    }
-    if (pendingFilled > 0) {
-      Alert.alert(
-        'Ej avbockade set',
-        `${pendingFilled} set har värden men är inte avbockade. Vill du spara dem också?`,
-        [
-          { text: 'Avbryt', style: 'cancel' },
-          { text: 'Hoppa över dem', onPress: () => finish(false) },
-          { text: 'Spara dem', onPress: () => finish(true) },
-        ]
-      );
-      return;
-    }
-    Alert.alert('Avsluta pass', `Spara passet med ${loggedCount} set?`, [
-      { text: 'Fortsätt träna', style: 'cancel' },
-      { text: 'Avsluta & spara', onPress: () => finish(false) },
-    ]);
-  }
-
   function handleDiscard() {
-    Alert.alert('Kasta pass', 'Passet och alla loggade set tas bort permanent.', [
-      { text: 'Behåll', style: 'cancel' },
+    Alert.alert('Avfärda passet', 'Passet och alla loggade set tas bort. Det går inte att ångra.', [
+      { text: 'Tillbaka', style: 'cancel' },
       {
-        text: 'Kasta pass',
+        text: 'Avfärda',
         style: 'destructive',
         onPress: async () => {
-          await cancelSession(sessionId);
+          if (sessionIdRef.current) await cancelSession(sessionIdRef.current);
+          setShowFinish(false);
           navigation.goBack();
         },
       },
     ]);
   }
+
+  const started = sessionId != null;
+  const toSave = loggedCount + (includePending ? pendingFilled : 0);
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -440,20 +469,21 @@ export default function ActiveWorkoutScreen() {
         <View style={s.headerCenter}>
           <Text style={s.sessionName} numberOfLines={1}>{sessionName}</Text>
           <Text style={s.timer}>
-            {elapsed}  ·  {loggedCount}/{plannedCount} set
+            {started
+              ? `${elapsed}  ·  ${loggedCount}/${plannedCount} set`
+              : `Inte startat  ·  ${exercises.length} övningar`}
           </Text>
         </View>
-        <TouchableOpacity
-          style={[s.finishBtn, finishing && { opacity: 0.6 }]}
-          onPress={handleFinish}
-          disabled={finishing}
-        >
-          {finishing ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
+        {started ? (
+          <TouchableOpacity style={s.finishBtn} onPress={() => setShowFinish(true)}>
             <Text style={s.finishText}>Avsluta</Text>
-          )}
-        </TouchableOpacity>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={s.startBtn} onPress={ensureStarted}>
+            <Ionicons name="play" size={14} color="#fff" />
+            <Text style={s.startText}>Starta</Text>
+          </TouchableOpacity>
+        )}
       </View>
       <View style={s.progressTrack}>
         <View
@@ -601,9 +631,16 @@ export default function ActiveWorkoutScreen() {
               <Text style={s.addExText}>Lägg till övning</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={s.discardBtn} onPress={handleDiscard}>
-              <Text style={s.discardText}>Kasta pass</Text>
-            </TouchableOpacity>
+            {started ? (
+              <TouchableOpacity style={s.bottomFinish} onPress={() => setShowFinish(true)}>
+                <Text style={s.bottomFinishText}>Avsluta passet</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={s.bottomStart} onPress={ensureStarted}>
+                <Ionicons name="play" size={18} color="#fff" />
+                <Text style={s.bottomStartText}>Starta passet</Text>
+              </TouchableOpacity>
+            )}
           </ScrollView>
         )}
       </KeyboardAvoidingView>
@@ -643,6 +680,55 @@ export default function ActiveWorkoutScreen() {
         onSelect={handleAddExercise}
         onClose={() => setShowPicker(false)}
       />
+
+      <Modal
+        visible={showFinish}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowFinish(false)}
+      >
+        <View style={s.sheetBackdrop}>
+          <View style={s.sheet}>
+            <Text style={s.sheetTitle}>Avsluta passet?</Text>
+            <Text style={s.sheetSub}>
+              {elapsed}  ·  {loggedCount} avbockade set
+            </Text>
+
+            {pendingFilled > 0 && (
+              <TouchableOpacity style={s.pendingRow} onPress={() => setIncludePending(v => !v)}>
+                <Ionicons
+                  name={includePending ? 'checkbox' : 'square-outline'}
+                  size={22}
+                  color={includePending ? COLORS.green : COLORS.textMuted}
+                />
+                <Text style={s.pendingText}>
+                  Spara även {pendingFilled} ifyllda set som inte är avbockade
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[s.sheetSave, (toSave === 0 || finishing) && { opacity: 0.4 }]}
+              disabled={toSave === 0 || finishing}
+              onPress={() => finish(includePending)}
+            >
+              {finishing ? (
+                <ActivityIndicator color="#06281d" />
+              ) : (
+                <Text style={s.sheetSaveText}>
+                  {toSave === 0 ? 'Inga set att spara' : `Spara passet (${toSave} set)`}
+                </Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity style={s.sheetDiscard} onPress={handleDiscard} disabled={finishing}>
+              <Text style={s.sheetDiscardText}>Avfärda passet</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.sheetCancel} onPress={() => setShowFinish(false)} disabled={finishing}>
+              <Text style={s.sheetCancelText}>Fortsätt träna</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={historyFor != null}
@@ -786,8 +872,78 @@ const s = StyleSheet.create({
     marginTop: 4,
   },
   addExText: { color: COLORS.accent, fontWeight: '700', fontSize: 15 },
-  discardBtn: { alignItems: 'center', padding: 18, marginTop: 8 },
-  discardText: { color: COLORS.danger, fontWeight: '600', fontSize: 14 },
+  startBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: COLORS.accent,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: RADIUS.full,
+  },
+  startText: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  bottomStart: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: COLORS.accent,
+    borderRadius: RADIUS.md,
+    padding: 16,
+    marginTop: 14,
+  },
+  bottomStartText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  bottomFinish: {
+    alignItems: 'center',
+    borderRadius: RADIUS.md,
+    padding: 15,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: COLORS.green + '88',
+  },
+  bottomFinishText: { color: COLORS.green, fontWeight: '700', fontSize: 15 },
+
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: RADIUS.lg,
+    borderTopRightRadius: RADIUS.lg,
+    padding: 20,
+    paddingBottom: 32,
+    gap: 10,
+  },
+  sheetTitle: { color: COLORS.text, fontSize: 20, fontWeight: '800' },
+  sheetSub: { color: COLORS.textMuted, fontSize: 14, marginBottom: 6 },
+  pendingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: COLORS.surface2,
+    borderRadius: RADIUS.md,
+    padding: 12,
+  },
+  pendingText: { flex: 1, color: COLORS.text, fontSize: 14 },
+  sheetSave: {
+    backgroundColor: COLORS.green,
+    borderRadius: RADIUS.md,
+    padding: 15,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  sheetSaveText: { color: '#06281d', fontWeight: '800', fontSize: 16 },
+  sheetDiscard: {
+    borderRadius: RADIUS.md,
+    padding: 14,
+    alignItems: 'center',
+    backgroundColor: COLORS.dangerDim,
+  },
+  sheetDiscardText: { color: COLORS.danger, fontWeight: '700', fontSize: 15 },
+  sheetCancel: { padding: 12, alignItems: 'center' },
+  sheetCancelText: { color: COLORS.textMuted, fontWeight: '600', fontSize: 15 },
 
   restBar: {
     backgroundColor: COLORS.surface,

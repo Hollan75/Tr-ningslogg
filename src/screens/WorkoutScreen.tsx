@@ -15,7 +15,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { COLORS, RADIUS } from '../theme';
 import { getTemplates, deleteTemplate, getActiveSession } from '../database';
 import ResumeBanner from '../components/ResumeBanner';
-import { startWorkout } from '../utils/workout';
+import { openWorkout, startWorkout } from '../utils/workout';
 import { fmtRelativeDate } from '../utils/format';
 import type { WorkoutTemplate, WorkoutSession } from '../types';
 import type { RootStackParamList } from '../navigation/AppNavigator';
@@ -83,15 +83,15 @@ export default function WorkoutScreen() {
 
         <TouchableOpacity
           style={s.freeBtn}
-          onPress={() => startWorkout(navigation, undefined, 'Fritt pass')}
+          onPress={() => openWorkout(navigation, undefined, 'Fritt pass')}
           activeOpacity={0.85}
         >
           <View style={s.freeIcon}>
             <Ionicons name="flash" size={20} color="#fff" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={s.freeTitle}>Starta tomt pass</Text>
-            <Text style={s.freeSub}>Lägg till övningar medan du tränar</Text>
+            <Text style={s.freeTitle}>Tomt pass</Text>
+            <Text style={s.freeSub}>Lägg till övningar och tryck Starta när du kör</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color="#fff" />
         </TouchableOpacity>
@@ -118,7 +118,7 @@ export default function WorkoutScreen() {
               key={template.id}
               style={s.card}
               activeOpacity={0.85}
-              onPress={() => startWorkout(navigation, template.id, template.name)}
+              onPress={() => openWorkout(navigation, template.id, template.name)}
               onLongPress={() => handleTemplateMenu(template)}
             >
               <View style={s.cardTop}>
@@ -135,10 +135,14 @@ export default function WorkoutScreen() {
                   {template.exercise_count ?? 0} övningar
                   {template.last_used ? `  ·  Senast ${fmtRelativeDate(template.last_used).toLowerCase()}` : ''}
                 </Text>
-                <View style={s.startPill}>
+                <TouchableOpacity
+                  style={s.startPill}
+                  onPress={() => startWorkout(navigation, template.id, template.name)}
+                  hitSlop={8}
+                >
                   <Ionicons name="play" size={12} color="#fff" />
                   <Text style={s.startText}>Starta</Text>
-                </View>
+                </TouchableOpacity>
               </View>
             </TouchableOpacity>
           ))
