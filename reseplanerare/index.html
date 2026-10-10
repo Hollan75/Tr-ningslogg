@@ -232,7 +232,7 @@ details.more[open] > summary { margin-bottom: 8px; }
   <div class="wrap">
     <div class="brand">
       <h1>Resekompassen</h1>
-      <p>Flyg, boende och evenemang utifrån dina ledigheter och intressen · <span class="mono" id="appVersion">v12</span></p>
+      <p>Flyg, boende och evenemang utifrån dina ledigheter och intressen · <span class="mono" id="appVersion">v13</span></p>
     </div>
     <div class="flap" id="flap" aria-label="Aktuell rutt"></div>
   </div>
@@ -242,7 +242,7 @@ details.more[open] > summary { margin-bottom: 8px; }
   <div class="wrap" role="tablist">
     <button class="tab" role="tab" data-tab="chat" id="tab-chat">Assistent</button>
     <button class="tab" role="tab" data-tab="plan" id="tab-plan">Planera resa</button>
-    <button class="tab" role="tab" data-tab="discover" id="tab-discover">Upptäck evenemang</button>
+    <button class="tab" role="tab" data-tab="discover" id="tab-discover">Upptäck</button>
     <button class="tab" role="tab" data-tab="leave" id="tab-leave">Ledigheter</button>
     <button class="tab" role="tab" data-tab="saved" id="tab-saved">Sparade resor</button>
     <button class="tab" role="tab" data-tab="profile" id="tab-profile">Profil</button>
@@ -255,6 +255,11 @@ details.more[open] > summary { margin-bottom: 8px; }
   <section class="panel" id="panel-chat" data-panel="chat">
     <div class="chatgrid">
       <div class="chatbox">
+        <div class="chathead" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line)">
+          <button class="btn sm ghost" type="button" id="chatArchiveBtn">Tidigare samtal</button>
+          <button class="btn sm" type="button" id="chatNew">Ny konversation</button>
+        </div>
+        <div id="chatArchive" class="list" hidden style="border:0;border-bottom:1px solid var(--line);border-radius:0;max-height:50vh;overflow:auto"></div>
         <div class="chatlog" id="chatLog" aria-live="polite"></div>
         <form class="composer" id="chatForm" autocomplete="off">
           <label for="chatInput" class="label" hidden>Meddelande</label>
@@ -301,6 +306,24 @@ details.more[open] > summary { margin-bottom: 8px; }
 
   <!-- UPPTÄCK -->
   <section class="panel" id="panel-discover" data-panel="discover" hidden>
+    <div class="sechead"><h2>Weekendresa</h2></div>
+    <p class="intro">Billiga resor till bra weekendmål under dina lediga helger. Livepriser från Kiwi.com till städer i hela Europa, och Claude bedömer typiskt väder och hur bra staden är för en helg.</p>
+    <div class="form">
+      <div class="row">
+        <div class="field"><label class="label" for="wLeave">Helg</label><select id="wLeave"></select></div>
+        <div class="field"><label class="label" for="wHours">Max flygtid</label>
+          <select id="wHours"><option value="2">2 timmar</option><option value="3">3 timmar</option><option value="4" selected>4 timmar</option><option value="5">5 timmar</option></select></div>
+        <div class="field"><label class="label" for="wMax">Maxpris tur och retur</label>
+          <select id="wMax"><option value="0">Inget tak</option><option value="1500">1 500 kr</option><option value="2500">2 500 kr</option><option value="4000">4 000 kr</option><option value="6000">6 000 kr</option></select></div>
+      </div>
+      <div class="chips">
+        <button type="button" class="chip" id="wSun" aria-pressed="true">Bra väder viktigt</button>
+        <button type="button" class="chip" id="wFri" aria-pressed="false">Kan åka redan fredag</button>
+      </div>
+      <div class="actions"><button class="btn primary" type="button" id="wBtn">Hitta weekendresor</button></div>
+    </div>
+    <div id="weekendOut"></div>
+    <div class="sechead" style="margin-top:12px"><h2>Evenemang</h2></div>
     <p class="intro">Börja i evenemanget i stället för datumet. Välj en period och Claude letar efter festivaler, matcher, lopp och mässor som passar dina intressen, med förslag på när du ska åka.</p>
     <form class="form" id="discForm" autocomplete="off">
       <div class="row">
@@ -403,7 +426,7 @@ details.more[open] > summary { margin-bottom: 8px; }
 (() => {
 "use strict";
 // Visa fel synligt, så att de går att skärmdumpa på telefonen.
-const showErr = msg => { const b = document.getElementById("errBar"); if (!b) return; b.hidden = false; b.textContent = "Fel (v12): " + String(msg).slice(0, 300) + " · Ta en skärmdump och skicka till Claude."; };
+const showErr = msg => { const b = document.getElementById("errBar"); if (!b) return; b.hidden = false; b.textContent = "Fel (v13): " + String(msg).slice(0, 300) + " · Ta en skärmdump och skicka till Claude."; };
 window.addEventListener("error", e => showErr(e.message || e.error || "okänt fel"));
 window.addEventListener("unhandledrejection", e => { const r = e.reason; if (r && (r.code === "cancelled")) return; showErr((r && (r.message || r.code)) || r || "okänt fel"); });
 
@@ -514,7 +537,7 @@ const DEFAULT_PROFILE = {
   stay: "hotell", stars: "3", area: "centralt", loyalty: "", interests: ["Löpning & lopp", "Mat & vin", "Konserter"],
   customInterests: [], pace: "lagom", diet: "", notes: "", memories: [],
 };
-const state = { profile: { ...DEFAULT_PROFILE }, leaves: [], wishes: [], chat: [], trips: [], plan: null, planInput: null, dayplan: null, profileSaved: false };
+const state = { profile: { ...DEFAULT_PROFILE }, leaves: [], wishes: [], chat: [], chatArchive: [], trips: [], plan: null, planInput: null, dayplan: null, profileSaved: false };
 const store = { mode: "local", db: null, uid: null };
 
 function allInterests() { return [...new Set([...DEFAULT_INTERESTS, ...(state.profile.customInterests || [])])]; }
@@ -524,6 +547,8 @@ async function initStore() {
   if (local) applyData(local);
   const localChat = safeLS.get("rk-chat");
   if (Array.isArray(localChat)) state.chat = localChat;
+  const localArch = safeLS.get("rk-chat-archive");
+  if (Array.isArray(localArch)) state.chatArchive = localArch;
   renderAll();
   if (!window.claude?.use) { renderStoreMode(); return; }
   try {
@@ -536,6 +561,7 @@ async function initStore() {
       if (snap.exists) applyData(thaw(snap.data()));
       const cs = await chatRef().get();
       if (cs.exists && Array.isArray(cs.data().messages)) state.chat = thaw(cs.data().messages);
+      if (cs.exists && Array.isArray(cs.data().archive)) state.chatArchive = thaw(cs.data().archive);
       const ts = await tripsRef().get();
       state.trips = ts.docs.map(d => ({ id: d.id, ...thaw(d.data()) })).sort((a, b) => (b.savedAt || "").localeCompare(a.savedAt || ""));
       renderAll();
@@ -579,8 +605,29 @@ function renderStoreMode() {
 let chatWriting = Promise.resolve();
 function persistChat() {
   const messages = state.chat.slice(-40).map(({ snapshot, ...m }) => m);
-  safeLS.set("rk-chat", messages);
-  if (store.mode === "db") chatWriting = chatWriting.then(() => chatRef().set({ messages })).catch(e => console.warn(e));
+  const archive = state.chatArchive.slice(0, 5);
+  safeLS.set("rk-chat", messages); safeLS.set("rk-chat-archive", archive);
+  if (store.mode === "db") chatWriting = chatWriting.then(() => chatRef().set({ messages, archive })).catch(e => console.warn(e));
+}
+// Ny konversation: det gamla samtalet arkiveras (text och sparade ändringar, utan sökresultat).
+function newConversation() {
+  if (chatPending) { toast("Vänta tills svaret är klart, eller tryck Avbryt."); return; }
+  if (!state.chat.length) { toast("Samtalet är redan tomt."); return; }
+  const firstUser = state.chat.find(m => m.role === "user");
+  state.chatArchive = [{ id: uid(), endedAt: new Date().toISOString(), title: str(firstUser?.text || "Samtal", 70),
+    messages: state.chat.slice(-40).map(m => ({ role: m.role, text: m.text, changes: m.changes || [] })) }, ...state.chatArchive].slice(0, 5);
+  state.chat = [];
+  persistChat(); renderChat(); renderArchive();
+  toast("Ny konversation. Allt du sparat finns kvar.");
+}
+function renderArchive() {
+  const box = $("#chatArchive"); if (!box) return;
+  $("#chatArchiveBtn").textContent = `Tidigare samtal (${state.chatArchive.length})`;
+  $("#chatArchiveBtn").disabled = !state.chatArchive.length;
+  box.replaceChildren(...state.chatArchive.map(a => h("details", { style: "padding:8px 0;border-top:1px solid var(--line)" },
+    h("summary", { style: "cursor:pointer" }, h("strong", null, a.title), h("span", { class: "muted small" }, ` · ${new Date(a.endedAt).toLocaleDateString("sv-SE", { day: "numeric", month: "short" })}`)),
+    h("div", { style: "display:grid;gap:6px;margin-top:8px" }, a.messages.map(m => h("div", { class: "small", style: m.role === "user" ? "font-weight:600" : "" },
+      (m.role === "user" ? "Du: " : "Assistenten: ") + m.text, (m.changes || []).length ? h("span", { class: "muted" }, ` [Sparat: ${m.changes.join("; ")}]`) : null))))));
 }
 
 /* ---------- Claude ---------- */
@@ -841,6 +888,16 @@ function normItin(x) {
   const b = x.baggage && typeof x.baggage === "object" ? { personalItem: +x.baggage.personalItem || 0, cabinBag: +x.baggage.cabinBag || 0, checkedBag: +x.baggage.checkedBag || 0 } : null;
   return { id: String(x.id || uid()), price: +x.price, total: +x.totalDurationSeconds || 0, url: safeUrl(x.bookingUrl), bags: b, out: normLeg(x.outbound), back: normLeg(x.inbound) };
 }
+function sameTrip(x) {
+  if (!x.back) return true;
+  const homeCodes = new Set([state.profile.home, ...String(state.profile.alt || "").split(/[^A-Za-z]+/)].filter(Boolean).map(s => s.toUpperCase()));
+  const o = x.out, b = x.back;
+  const outEnd = o.route[o.route.length - 1], backStart = b.route[0];
+  const sameDest = backStart === outEnd || (o.toCity && b.fromCity && fold(o.toCity) === fold(b.fromCity));
+  const backEnd = b.route[b.route.length - 1], outStart = o.route[0];
+  const sameHome = backEnd === outStart || homeCodes.has(backEnd) || (o.fromCity && b.toCity && fold(o.fromCity) === fold(b.toCity));
+  return sameDest && sameHome;
+}
 // Är resmålet inte en IATA-kod görs även en sökning med en träff per stad, så att ett land eller en region ("Spanien") ger flera orter.
 async function kiwiSearch(q) {
   const broad = !/^[A-Za-z]{3}$/.test(String(q.dest || ""));
@@ -857,16 +914,6 @@ async function kiwiSearch(q) {
   // Kiwi kan kombinera utresa till en ort med hemresa från en annan (t.ex. ut till Alicante, hem från Barcelona).
   // Behåll bara resor där hemresan går från samma ort som utresan landar i, och landar där resan började
   // eller på någon av dina flygplatser.
-  const homeCodes = new Set([state.profile.home, ...String(state.profile.alt || "").split(/[^A-Za-z]+/)].filter(Boolean).map(s => s.toUpperCase()));
-  const sameTrip = x => {
-    if (!x.back) return true;
-    const o = x.out, b = x.back;
-    const outEnd = o.route[o.route.length - 1], backStart = b.route[0];
-    const sameDest = backStart === outEnd || (o.toCity && b.fromCity && fold(o.toCity) === fold(b.fromCity));
-    const backEnd = b.route[b.route.length - 1], outStart = o.route[0];
-    const sameHome = backEnd === outStart || homeCodes.has(backEnd) || (o.fromCity && b.toCity && fold(o.fromCity) === fold(b.toCity));
-    return sameDest && sameHome;
-  };
   const items = [...seen.values()].filter(sameTrip);
   const multi = broad && new Set(items.map(destCity)).size > 1;
   return { items, multi, fetchedAt: Date.now(), query: q, note: err ? String(err).slice(0, 200) : "" };
@@ -1563,6 +1610,157 @@ function renderDiscover(list, out) {
           ext(`https://www.google.com/search?q=${encodeURIComponent(`${x.event} ${(x.startDate || "").slice(0, 4)}`)}`, "Kolla datum", "btn sm")))))));
 }
 
+/* ---------- Weekendresor ---------- */
+const WEEKEND_REGIONS = ["Europe", "Spain", "Portugal", "Italy", "Greece"];
+const naive = s => { const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(String(s || "")); return m ? new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5]) : null; };
+function upcomingLeaves() { return state.leaves.filter(l => l.to >= iso(TODAY)).sort((a, b) => a.from.localeCompare(b.from)); }
+async function weekendSearch(l, prm) {
+  let depFrom = l.from;
+  if (prm.friday && parse(l.from).getDay() === 6) depFrom = iso(addDays(parse(l.from), -1));
+  const base = kiwiInput({ dest: "Europe", from: depFrom, to: l.to, flex: 0 }, "price");
+  if (depFrom !== l.from) base.departureDateTo = dmy(l.from);
+  base.one_for_city = true;
+  base.max_fly_duration = Math.max(1, Math.min(12, +prm.maxHours || 4));
+  if (+prm.maxPrice) base.price_to = +prm.maxPrice;
+  const res = await Promise.allSettled(WEEKEND_REGIONS.map(r => callConnector(KIWI, "search-flight", { ...base, flyTo: r })));
+  const ok = res.filter(r => r.status === "fulfilled").map(r => r.value);
+  if (!ok.length) throw res[0].reason;
+  const best = new Map();
+  for (const pl of ok) for (const raw of (pl && Array.isArray(pl.itineraries) ? pl.itineraries : [])) {
+    const x = normItin(raw);
+    if (!Number.isFinite(x.price) || !x.out || !x.back || !sameTrip(x)) continue;
+    const a = naive(x.out.arr), d = naive(x.back.dep);
+    x.onSite = a && d ? Math.round((d - a) / 36e5) : 0;
+    if (x.onSite < 12) continue; // för kort tid på plats för en helg
+    x.country = str(raw.outbound?.segments?.[raw.outbound.segments.length - 1]?.toCountry, 40);
+    const c = destCity(x);
+    if (c && (!best.has(c) || best.get(c).price > x.price)) best.set(c, x);
+  }
+  return { leave: { id: l.id, label: l.label, from: l.from, to: l.to }, items: [...best.values()].sort((a, b) => a.price - b.price) };
+}
+async function rateWeekendCities(weekends, prm) {
+  const sample = await getSample();
+  if (!sample) return {};
+  const wanted = [];
+  for (const w of weekends) for (const x of (w.items || []).slice(0, 14)) wanted.push({ city: destCity(x), country: x.country, month: w.leave.from.slice(0, 7) });
+  if (!wanted.length) return {};
+  const uniq = [...new Map(wanted.map(c => [c.city + "|" + c.month, c])).values()].slice(0, 40);
+  const prompt = `Bedöm städer som mål för en weekendresa för en resenär i Sverige. Intressen: ${state.profile.interests.join(", ")}.
+För varje stad och månad: typiskt väder den månaden (klimatnormal, inte prognos), och hur bra staden är för en helgresa med tanke på intressena.
+Städer: ${JSON.stringify(uniq)}
+Svara ENDAST med JSON: {"ratings":[{"city":"exakt samma stadsnamn","month":"YYYY-MM","tempC":22,"weather":"kort, t.ex. Soligt och varmt","weatherScore":1-5,"weekendScore":1-5,"why":"max 12 ord om vad som gör staden bra för helgen"}]}
+weatherScore: 5 = varmt och soligt, 3 = milt med risk för regn, 1 = kallt, mörkt eller regnigt.`;
+  try {
+    const r = await sample.json(prompt, { modelTier: "quick" });
+    const map = {};
+    for (const x of (r && Array.isArray(r.ratings) ? r.ratings : [])) if (x && x.city) map[fold(x.city) + "|" + String(x.month || "")] = {
+      tempC: Number.isFinite(+x.tempC) ? Math.round(+x.tempC) : null, weather: str(x.weather, 60), weatherScore: Math.max(0, Math.min(5, +x.weatherScore || 0)), weekendScore: Math.max(0, Math.min(5, +x.weekendScore || 0)), why: str(x.why, 120) };
+    return map;
+  } catch (e) { console.warn("rate", e); return {}; }
+}
+async function findWeekendTrips(leaves, prm, onProgress) {
+  const weekends = [];
+  for (const l of leaves.slice(0, 4)) {
+    onProgress?.(`Söker flyg för ${l.label || fmtRange(l.from, l.to)}…`);
+    try { weekends.push(await weekendSearch(l, prm)); }
+    catch (e) { weekends.push({ leave: { id: l.id, label: l.label, from: l.from, to: l.to }, items: [], error: e?.code || "upstream_error" }); }
+  }
+  onProgress?.(prm.sun ? "Claude bedömer väder och weekendmål…" : "Claude bedömer weekendmålen…");
+  const ratings = await rateWeekendCities(weekends, prm);
+  return { weekends, ratings, prm, fetchedAt: Date.now() };
+}
+const ratingOf = (data, x, w) => data.ratings?.[fold(destCity(x)) + "|" + w.leave.from.slice(0, 7)] || null;
+function weekendScore(data, x, w, maxP, minP) {
+  const r = ratingOf(data, x, w);
+  const priceScore = maxP > minP ? 5 * (maxP - x.price) / (maxP - minP) : 5;
+  return (r ? (data.prm.sun ? 2 * r.weatherScore : 0.5 * r.weatherScore) + r.weekendScore : 0) + priceScore + (x.onSite >= 36 ? 1 : 0);
+}
+let weekendSort = "best";
+function weekendView(data, opts = {}) {
+  const wrap = h("div", { style: "display:grid;gap:14px" });
+  const draw = () => {
+    const chip = (label, key) => h("button", { type: "button", class: "chip", "aria-pressed": String(weekendSort === key), onclick: () => { weekendSort = key; draw(); } }, label);
+    const nodes = [h("div", { class: "chips", style: "align-items:center" }, h("span", { class: "label" }, "Sortera"), chip("Bäst helhet", "best"), chip("Pris", "price"), chip("Väder", "weather"), chip("Tid på plats", "onsite"))];
+    for (const w of data.weekends) {
+      const head = h("div", { class: "sechead" }, h("strong", null, `${w.leave.label || "Ledig helg"} · ${fmtRange(w.leave.from, w.leave.to)}`), h("span", { class: "small muted" }, w.items.length ? `${w.items.length} orter` : ""));
+      if (w.error) { nodes.push(head, connectorError(KIWI, { code: w.error })); continue; }
+      if (!w.items.length) { nodes.push(head, h("p", { class: "small muted" }, "Inga resor hittades som passar helgen. Prova längre flygtid, högre maxpris eller att åka redan fredag.")); continue; }
+      const prices = w.items.map(x => x.price), maxP = Math.max(...prices), minP = Math.min(...prices);
+      const sorters = {
+        best: (a, b) => weekendScore(data, b, w, maxP, minP) - weekendScore(data, a, w, maxP, minP),
+        price: (a, b) => a.price - b.price,
+        weather: (a, b) => ((ratingOf(data, b, w)?.weatherScore || 0) - (ratingOf(data, a, w)?.weatherScore || 0)) || ((ratingOf(data, b, w)?.tempC ?? -99) - (ratingOf(data, a, w)?.tempC ?? -99)) || a.price - b.price,
+        onsite: (a, b) => b.onSite - a.onSite || a.price - b.price,
+      };
+      const list = [...w.items].sort(sorters[weekendSort]);
+      const card = x => {
+        const r = ratingOf(data, x, w), c = destCity(x);
+        return h("div", { class: "card" },
+          h("div", { style: "display:flex;justify-content:space-between;gap:8px;align-items:baseline" }, h("strong", null, `${c}${x.country ? ", " + x.country : ""}`), h("span", { class: "price" }, kr(x.price))),
+          h("div", { class: "small" }, [r && (r.tempC != null ? `${r.tempC}° ` : "") + (r.weather || ""), `${durTxt(x.out.dur)} flyg`, `${x.onSite} h på plats`, x.out.stops || x.back.stops ? "med byte" : "direkt"].filter(Boolean).join(" · ")),
+          h("div", { class: "small muted" }, `Ut ${fmtDay(dateOf(x.out.dep))} ${hhmm(x.out.dep)}–${hhmm(x.out.arr)} · Hem ${fmtDay(dateOf(x.back.dep))} ${hhmm(x.back.dep)}–${hhmm(x.back.arr)}`),
+          r?.why ? h("div", { class: "small" }, r.why) : null,
+          h("div", { class: "actions small" },
+            !opts.readonly && h("button", { class: "btn sm primary", type: "button", onclick: () => { openPlanner(c, dateOf(x.out.dep), dateOf(x.back.dep)); runPlan(); } }, "Planera"),
+            x.url && ext(x.url, "Boka", "btn sm"),
+            eventSaveBtn({ name: `Weekend i ${c}`, city: c, startDate: dateOf(x.out.dep), endDate: dateOf(x.back.dep), departDate: dateOf(x.out.dep), returnDate: dateOf(x.back.dep), interest: "", why: [r?.weather, r?.why, `Flyg ${kr(x.price)}`].filter(Boolean).join(". ") })));
+      };
+      nodes.push(head, h("div", { class: "grid2" }, list.slice(0, 6).map(card)));
+      if (list.length > 6) nodes.push(h("details", { class: "more" }, h("summary", null, `Visa ${list.length - 6} till`), h("div", { class: "grid2" }, list.slice(6).map(card))));
+    }
+    nodes.push(h("p", { class: "small muted", style: "max-width:75ch" }, `Flygpriser från Kiwi.com, hämtade ${clock(data.fetchedAt)}, ${paxLabel()}. Vädret är typiskt för säsongen enligt Claude, inte en prognos.`));
+    wrap.replaceChildren(...nodes);
+  };
+  draw();
+  return wrap;
+}
+function weekendLeaveOptions() {
+  const sel = $("#wLeave"); if (!sel) return;
+  const prev = sel.value; sel.replaceChildren();
+  const ups = upcomingLeaves();
+  if (ups.length > 1) sel.append(h("option", { value: "all" }, `Alla kommande (${Math.min(4, ups.length)} första)`));
+  for (const l of ups) sel.append(h("option", { value: l.id }, `${l.label || "Ledighet"} (${fmtRange(l.from, l.to)})`));
+  if (!ups.length) sel.append(h("option", { value: "" }, "Inga sparade ledigheter, lägg till under Ledigheter"));
+  if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+}
+async function runWeekend() {
+  const out = $("#weekendOut");
+  const ups = upcomingLeaves();
+  const v = $("#wLeave").value;
+  const leaves = v === "all" ? ups.slice(0, 4) : ups.filter(l => l.id === v);
+  if (!leaves.length) { toast("Lägg till en ledig helg under Ledigheter först."); return; }
+  const prm = { maxHours: +$("#wHours").value, maxPrice: +$("#wMax").value, sun: $("#wSun").getAttribute("aria-pressed") === "true", friday: $("#wFri").getAttribute("aria-pressed") === "true" };
+  const btn = $("#wBtn"); btn.disabled = true;
+  const status = statusEl("Söker…"); out.replaceChildren(status);
+  try {
+    const data = await findWeekendTrips(leaves, prm, msg => { status.lastChild.textContent = msg; });
+    out.replaceChildren(weekendView(data));
+  } catch (e) { out.replaceChildren(connectorError(KIWI, e, runWeekend)); }
+  finally { btn.disabled = false; }
+}
+async function chatWeekend(msg, q) {
+  msg.weekend = { status: "loading", text: "Söker flyg till weekendmål…" };
+  renderChat();
+  const ups = upcomingLeaves();
+  let leaves = Array.isArray(q.leaves) && q.leaves.length ? ups.filter(l => q.leaves.includes(l.id)) : [];
+  if (!leaves.length && validIso(q.from) && validIso(q.to)) {
+    leaves = ups.filter(l => l.from <= q.to && l.to >= q.from);
+    if (!leaves.length) leaves = [{ id: "q", label: "Vald period", from: q.from, to: q.to }];
+  }
+  if (!leaves.length) leaves = ups.slice(0, 4);
+  if (!leaves.length) { msg.weekend = { status: "error", text: "Du har inga sparade lediga helger. Berätta när du är ledig, så söker jag sedan." }; persistChat(); renderChat(); return; }
+  try {
+    const data = await findWeekendTrips(leaves, q, t => { msg.weekend = { status: "loading", text: t }; renderChat(); });
+    msg.weekend = { status: "ok", data };
+  } catch (e) { msg.weekend = { status: "error", text: "Kiwi.com svarade inte. Försök igen om en stund." }; }
+  persistChat(); renderChat();
+}
+function chatWeekendEl(w) {
+  if (w.status === "loading") return h("div", { class: "chatlive" }, h("div", { class: "muted" }, h("span", { class: "spinner", style: "display:inline-block;vertical-align:middle;margin-right:6px", "aria-hidden": "true" }), w.text || "Söker…"));
+  if (w.status === "error") return h("div", { class: "chatlive" }, h("div", null, w.text));
+  return h("div", { class: "chatlive", style: "max-width:100%" }, weekendView(w.data));
+}
+
 /* ---------- Spara evenemang (markera) ---------- */
 const eventKey = (name, start) => String(name || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "") + "|" + (start || "");
 function eventSaveBtn(ev) {
@@ -1619,7 +1817,7 @@ function renderBridges() {
 function addLeave(l) {
   if (state.leaves.some(x => x.from === l.from && x.to === l.to)) { toast("Ledigheten finns redan"); return; }
   state.leaves.push({ id: uid(), ...l }); state.leaves.sort((a, b) => a.from.localeCompare(b.from));
-  persist(); renderLeaves(); renderKnowledge(); periodOptions(); toast("Ledigheten är sparad");
+  persist(); renderLeaves(); renderKnowledge(); periodOptions(); weekendLeaveOptions(); toast("Ledigheten är sparad");
 }
 function goDiscover(from, to) {
   selectTab("discover");
@@ -1726,6 +1924,7 @@ const showVal = (k, v) => k === "budget" ? kr(v) : (VALUE_LABEL[k]?.[v] ?? Strin
 const EXAMPLES = [
   "Jag bor i Göteborg och flyger helst direkt, gärna på morgonen",
   "Vi är två vuxna och ett barn på 6 år",
+  "Hitta en billig weekendresa med bra väder, max 4 timmars flyg, under mina lediga helger",
   "Jag vill springa ett maraton i Europa nästa höst",
   "Jag är ledig vecka 28 till 31 nästa sommar",
   "Jag äter vegetariskt och vill kunna träna på hotellet",
@@ -1767,6 +1966,7 @@ Regler:
 - Vill användaren få fram en konkret resa nu, lägg till "open_planner" med resmål och datum. Vill hen hitta evenemang för en period, lägg till "discover".
 - Frågar användaren vad flyg kostar, lägg till "flight_prices". Saknas datum, fråga först.
 - Frågar användaren när det är billigast att bo eller åka någonstans, lägg till "hotel_trend" (sidan visar Trivagos prisprognos per månad).
+- Vill användaren ha förslag på en (billig) resa under sina lediga helger eller en period, utan bestämt resmål, lägg till "find_weekend_trips". Sidan söker då livepriser till många städer i Europa och bedömer väder och weekendvärde. Ange maxHours om användaren nämner flygtid (annars 4), maxPrice om budget nämns, sun=true om väder är viktigt, friday=true om hen kan åka fredag. Säg i reply att resultaten visas nedan och fråga inte om sådant du kan anta.
 - "reply" bekräftar kort vad du sparade (1–3 meningar) och får avslutas med en följdfråga som fyller i det som saknas i profilen. Inga långa listor. Allmänna resefrågor får du besvara kort.
 
 Svara ENDAST med JSON: {"reply":"...","actions":[...]}. Tom lista om inget ska sparas. Tillåtna actions:
@@ -1782,6 +1982,7 @@ Svara ENDAST med JSON: {"reply":"...","actions":[...]}. Tom lista om inget ska s
 {"type":"remove_plan","id":"..."}
 {"type":"open_planner","destination":"...","from":"YYYY-MM-DD","to":"YYYY-MM-DD"}
 {"type":"discover","from":"YYYY-MM-DD","to":"YYYY-MM-DD"}
+{"type":"find_weekend_trips","leaves":["id för ledigheter, eller tom lista för alla kommande"],"from":"YYYY-MM-DD (valfritt, om användaren nämner en period)","to":"YYYY-MM-DD","maxHours":4,"maxPrice":0,"sun":true,"friday":false}
 {"type":"hotel_trend","destination":"stadens engelska namn","from":"YYYY-MM (första månaden)","to":"YYYY-MM (sista månaden, max 12 månader senare)"}
 {"type":"flight_prices","destination":"IATA-kod eller stadens engelska namn","from":"YYYY-MM-DD","to":"YYYY-MM-DD"} (när användaren frågar vad flyg kostar eller vill se priser: sidan hämtar då livepriser från Kiwi.com och visar dem under ditt svar, så hitta inte på priser själv)`;
 }
@@ -1881,8 +2082,12 @@ function applyActions(actions) {
             prices.push({ trend: true, dest: str(a.destination, 80), from: ym(a.from), to: ym(a.to) });
           }
           break;
+        case "find_weekend_trips":
+          if (!prices.some(x => x.weekend)) prices.push({ weekend: true, leaves: Array.isArray(a.leaves) ? a.leaves.map(String).slice(0, 4) : [], from: validIso(a.from) ? a.from : "", to: validIso(a.to) ? a.to : "",
+            maxHours: Math.max(1, Math.min(12, +a.maxHours || 4)), maxPrice: Math.max(0, +a.maxPrice || 0), sun: a.sun !== false, friday: !!a.friday });
+          break;
         case "flight_prices":
-          if (str(a.destination) && validIso(a.from) && validIso(a.to) && a.to > a.from && !prices.some(x => !x.trend))
+          if (str(a.destination) && validIso(a.from) && validIso(a.to) && a.to > a.from && !prices.some(x => !x.trend && !x.weekend))
             prices.push({ dest: str(a.destination, 80), from: a.from, to: a.to });
           break;
       }
@@ -1920,6 +2125,7 @@ function renderChat() {
       (m.changes || []).length ? h("div", { class: "saved" }, h("span", { class: "label" }, m.undone ? "Ångrat" : "Sparat"), m.changes.map(c => h("span", { class: "s", style: m.undone ? "text-decoration:line-through;opacity:.6" : null }, c)), undoBtn) : null,
       m.live ? chatLiveEl(m.live) : null,
       m.trend ? chatTrendEl(m.trend) : null,
+      m.weekend ? chatWeekendEl(m.weekend) : null,
       (m.buttons || []).length ? h("div", { class: "actions" }, m.buttons.map(actionButton)) : null);
   });
   const pending = chatPending ? h("div", { class: "msg bot" }, h("div", { class: "bubble" }, h("span", { class: "spinner", style: "display:inline-block;vertical-align:middle;margin-right:8px", "aria-hidden": "true" }), chatStalled ? "Det tar längre tid än vanligt. Om en ruta om att tillåta Claude har dykt upp, godkänn den. Annars kan du trycka Avbryt och skicka igen." : "Tänker…")) : null;
@@ -1968,9 +2174,10 @@ async function sendChat(ev) {
     if (changes.length) { msg.snapshot = snapshot; state.profileSaved = true; persist(); }
     state.chat.push(msg);
     if (changes.length) renderAll();
-    const fq = prices.find(x => !x.trend), tq = prices.find(x => x.trend);
+    const fq = prices.find(x => !x.trend && !x.weekend), tq = prices.find(x => x.trend), wq = prices.find(x => x.weekend);
     if (fq) chatPrices(msg, fq);
     if (tq) chatTrend(msg, tq);
+    if (wq) chatWeekend(msg, wq);
   } catch (e) {
     if (e?.code === "cancelled") state.chat.push({ role: "assistant", text: "Avbrutet. Skriv igen när du vill.", error: true });
     else { console.warn("chat", e); state.chat.push({ role: "assistant", text: errText(e), error: true }); }
@@ -2047,7 +2254,7 @@ function renderAll() {
   renderInterestChips($("#pInterests"), planInterests);
   renderInterestChips($("#dInterests"), discInterests);
   renderBridges(); renderLeaves(); renderSaved(); periodOptions(); updatePlanLinks(); renderStoreMode();
-  renderKnowledge(); renderChat();
+  renderKnowledge(); renderChat(); renderArchive(); weekendLeaveOptions();
 }
 
 document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => selectTab(t.dataset.tab)));
@@ -2078,6 +2285,10 @@ onTap($("#leaveAdd"), () => {
 onTap($("#profSave"), saveProfile);
 onTap($("#chatSend"), sendChat);
 $("#chatStop").addEventListener("click", () => chatCtl?.abort());
+onTap($("#chatNew"), newConversation);
+$("#chatArchiveBtn").addEventListener("click", () => { const b = $("#chatArchive"); b.hidden = !b.hidden; });
+onTap($("#wBtn"), runWeekend);
+["#wSun", "#wFri"].forEach(s => $(s).addEventListener("click", e => { const on = e.currentTarget.getAttribute("aria-pressed") !== "true"; e.currentTarget.setAttribute("aria-pressed", String(on)); }));
 $("#chatInput").addEventListener("input", autoGrow);
 $("#chatInput").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(); } });
 $("#chatExamples").replaceChildren(...EXAMPLES.map(x => h("button", { class: "chip", type: "button", onclick: () => { $("#chatInput").value = x; autoGrow(); $("#chatInput").focus(); } }, x)));
