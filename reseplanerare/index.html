@@ -232,7 +232,7 @@ details.more[open] > summary { margin-bottom: 8px; }
   <div class="wrap">
     <div class="brand">
       <h1>Resekompassen</h1>
-      <p>Flyg, boende och evenemang utifrån dina ledigheter och intressen · <span class="mono" id="appVersion">v11</span></p>
+      <p>Flyg, boende och evenemang utifrån dina ledigheter och intressen · <span class="mono" id="appVersion">v12</span></p>
     </div>
     <div class="flap" id="flap" aria-label="Aktuell rutt"></div>
   </div>
@@ -403,7 +403,7 @@ details.more[open] > summary { margin-bottom: 8px; }
 (() => {
 "use strict";
 // Visa fel synligt, så att de går att skärmdumpa på telefonen.
-const showErr = msg => { const b = document.getElementById("errBar"); if (!b) return; b.hidden = false; b.textContent = "Fel (v11): " + String(msg).slice(0, 300) + " · Ta en skärmdump och skicka till Claude."; };
+const showErr = msg => { const b = document.getElementById("errBar"); if (!b) return; b.hidden = false; b.textContent = "Fel (v12): " + String(msg).slice(0, 300) + " · Ta en skärmdump och skicka till Claude."; };
 window.addEventListener("error", e => showErr(e.message || e.error || "okänt fel"));
 window.addEventListener("unhandledrejection", e => { const r = e.reason; if (r && (r.code === "cancelled")) return; showErr((r && (r.message || r.code)) || r || "okänt fel"); });
 
@@ -854,7 +854,20 @@ async function kiwiSearch(q) {
     const n = normItin(x); if (Number.isFinite(n.price) && n.out && !seen.has(n.id)) seen.set(n.id, n);
   }
   const err = ok.find(p => p && p.error)?.error;
-  const items = [...seen.values()];
+  // Kiwi kan kombinera utresa till en ort med hemresa från en annan (t.ex. ut till Alicante, hem från Barcelona).
+  // Behåll bara resor där hemresan går från samma ort som utresan landar i, och landar där resan började
+  // eller på någon av dina flygplatser.
+  const homeCodes = new Set([state.profile.home, ...String(state.profile.alt || "").split(/[^A-Za-z]+/)].filter(Boolean).map(s => s.toUpperCase()));
+  const sameTrip = x => {
+    if (!x.back) return true;
+    const o = x.out, b = x.back;
+    const outEnd = o.route[o.route.length - 1], backStart = b.route[0];
+    const sameDest = backStart === outEnd || (o.toCity && b.fromCity && fold(o.toCity) === fold(b.fromCity));
+    const backEnd = b.route[b.route.length - 1], outStart = o.route[0];
+    const sameHome = backEnd === outStart || homeCodes.has(backEnd) || (o.fromCity && b.toCity && fold(o.fromCity) === fold(b.toCity));
+    return sameDest && sameHome;
+  };
+  const items = [...seen.values()].filter(sameTrip);
   const multi = broad && new Set(items.map(destCity)).size > 1;
   return { items, multi, fetchedAt: Date.now(), query: q, note: err ? String(err).slice(0, 200) : "" };
 }
