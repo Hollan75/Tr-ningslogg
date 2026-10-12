@@ -11,6 +11,7 @@ import {
   Vibration,
   Modal,
   ActivityIndicator,
+  AppState,
 } from 'react-native';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
@@ -36,14 +37,14 @@ import {
 import ExercisePicker from '../components/ExercisePicker';
 import ExerciseHistoryList from '../components/ExerciseHistoryList';
 import { fmtDuration, fmtKg, fmtSet, parseNum } from '../utils/format';
-import { scheduleTimerAlert, cancelAlert, ringNow } from '../utils/notify';
+import { scheduleTimerAlert, cancelAlert, ringNow, dismissTimerAlerts } from '../utils/notify';
+import { loadRestSettings, DEFAULT_REST_SETTINGS } from '../utils/restSettings';
+import type { RestSettings } from '../utils/restSettings';
 import type { SessionSet, Exercise } from '../types';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 
 type RouteP = RouteProp<RootStackParamList, 'ActiveWorkout'>;
 type Nav = NativeStackNavigationProp<RootStackParamList>;
-
-const DEFAULT_REST = 90;
 
 interface Row {
   key: string;
@@ -88,19 +89,24 @@ function useElapsed(startedAt: number | null): string {
 }
 
 // Rest timer based on an end timestamp so it stays correct if the app is backgrounded
-function useRestTimer() {
+function useRestTimer(alertOn: boolean) {
   const [endAt, setEndAt] = useState<number | null>(null);
   const [total, setTotal] = useState(0);
   const [now, setNow] = useState(Date.now());
   const alertId = useRef<string | null>(null);
+  const generation = useRef(0);
 
+  // Each call supersedes earlier ones, so a slow schedule from a previous set can
+  // never be left behind and ring later
   async function reschedule(seconds: number | null) {
+    const mine = ++generation.current;
     const old = alertId.current;
     alertId.current = null;
     await cancelAlert(old);
-    if (seconds && seconds > 0) {
-      alertId.current = await scheduleTimerAlert(seconds, 'Vilan är slut', 'Dags för nästa set 💪');
-    }
+    if (!alertOn || !seconds || seconds <= 0) return;
+    const id = await scheduleTimerAlert(seconds, 'Vilan är slut', 'Dags för nästa set 💪');
+    if (generation.current !== mine) await cancelAlert(id);
+    else alertId.current = id;
   }
 
   useEffect(() => {
@@ -109,15 +115,20 @@ function useRestTimer() {
       const t = Date.now();
       setNow(t);
       if (t >= endAt) {
-        Vibration.vibrate([0, 300, 100, 300, 100, 300]);
         setEndAt(null);
-        // App is open: ring right away instead of waiting for the scheduled alert
+        // Drop the scheduled alert – it has rung already or would only ring late
         reschedule(null);
-        ringNow('Vilan är slut', 'Dags för nästa set 💪');
+        // Ended while the screen was off: the scheduled notification already rang
+        const missed = t - endAt > 2000;
+        if (alertOn && !missed) {
+          // App is open: ring right away instead of waiting for the scheduled alert
+          Vibration.vibrate([0, 300, 100, 300, 100, 300]);
+          ringNow('Vilan är slut', 'Dags för nästa set 💪');
+        }
       }
     }, 250);
     return () => clearInterval(iv);
-  }, [endAt]);
+  }, [endAt, alertOn]);
 
   useEffect(() => () => void cancelAlert(alertId.current), []);
 
@@ -126,6 +137,7 @@ function useRestTimer() {
     total,
     active: endAt != null,
     start(seconds: number) {
+      dismissTimerAlerts();
       setTotal(seconds);
       setNow(Date.now());
       setEndAt(Date.now() + seconds * 1000);
@@ -141,6 +153,7 @@ function useRestTimer() {
     skip() {
       setEndAt(null);
       reschedule(null);
+      dismissTimerAlerts();
     },
   };
 }
@@ -170,7 +183,9 @@ export default function ActiveWorkoutScreen() {
   const startingRef = useRef<Promise<number | null> | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const elapsed = useElapsed(startedAt);
-  const rest = useRestTimer();
+  const [restCfg, setRestCfg] = useState<RestSettings>(DEFAULT_REST_SETTINGS);
+  const restCfgRef = useRef<RestSettings>(DEFAULT_REST_SETTINGS);
+  const rest = useRestTimer(restCfg.alert);
 
   const [loading, setLoading] = useState(true);
   const [exercises, setExercises] = useState<ExState[]>([]);
@@ -189,6 +204,9 @@ export default function ActiveWorkoutScreen() {
   // Load template + any sets already logged (resuming an unfinished session)
   useEffect(() => {
     async function load() {
+      const cfg = await loadRestSettings();
+      restCfgRef.current = cfg;
+      setRestCfg(cfg);
       let tplId = templateId ?? null;
       let logged: SessionSet[] = [];
       if (params.sessionId) {
@@ -209,7 +227,7 @@ export default function ActiveWorkoutScreen() {
         exerciseId: te.exercise_id,
         name: te.exercise_name ?? '',
         bodyPart: te.bodyPart ?? null,
-        restSeconds: te.rest_seconds > 0 ? te.rest_seconds : DEFAULT_REST,
+        restSeconds: cfg.useTemplateRest && te.rest_seconds > 0 ? te.rest_seconds : cfg.seconds,
         mode: (te.mode ?? te.measure) === 'time' ? 'time' : 'reps',
         targetSets: te.sets,
         targetReps: te.reps_min,
@@ -227,7 +245,7 @@ export default function ActiveWorkoutScreen() {
             exerciseId: set.exercise_id,
             name: set.exercise_name ?? set.exercise_id,
             bodyPart: null,
-            restSeconds: DEFAULT_REST,
+            restSeconds: cfg.seconds,
             mode: set.is_time ? 'time' : 'reps',
             targetSets: null,
             targetReps: null,
@@ -398,7 +416,7 @@ export default function ActiveWorkoutScreen() {
           r.key === row.key ? { ...r, dbId, reps: repsStr, weight: weightStr } : r
         ),
       }));
-      rest.start(ex.restSeconds);
+      if (restCfgRef.current.enabled) rest.start(ex.restSeconds);
     } catch (err) {
       Alert.alert('Kunde inte spara setet', err instanceof Error ? err.message : String(err));
     } finally {
@@ -450,12 +468,21 @@ export default function ActiveWorkoutScreen() {
     setWork(null);
   }
 
+  // Clear "time is up" notifications from the shade when coming back to the app
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') dismissTimerAlerts();
+    });
+    return () => sub.remove();
+  }, []);
+
   useEffect(() => {
     if (!work) return;
     const iv = setInterval(() => {
       const t = Date.now();
       setWorkNow(t);
-      if (t >= work.endAt) finishWork(work, work.total, true);
+      // Ring only if the app was open – otherwise the scheduled notification already did
+      if (t >= work.endAt) finishWork(work, work.total, t - work.endAt <= 2000);
     }, 200);
     return () => clearInterval(iv);
   }, [work]);
@@ -491,7 +518,7 @@ export default function ActiveWorkoutScreen() {
       exerciseId: exercise.id,
       name: exercise.name,
       bodyPart: exercise.bodyPart,
-      restSeconds: DEFAULT_REST,
+      restSeconds: restCfgRef.current.seconds,
       mode: exercise.measure === 'time' ? 'time' : 'reps',
       targetSets: null,
       targetReps: null,

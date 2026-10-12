@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +23,14 @@ import {
 } from '../database';
 import { ensureExerciseLibraries } from '../data/seed';
 import ImportTemplatesModal from '../components/ImportTemplatesModal';
+import {
+  loadRestSettings,
+  saveRestSettings,
+  DEFAULT_REST_SETTINGS,
+  REST_CHOICES,
+  fmtRest,
+} from '../utils/restSettings';
+import type { RestSettings } from '../utils/restSettings';
 
 type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
 
@@ -32,6 +41,7 @@ export default function SettingsScreen() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [syncError, setSyncError] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
+  const [rest, setRest] = useState<RestSettings>(DEFAULT_REST_SETTINGS);
 
   useFocusEffect(
     useCallback(() => {
@@ -46,6 +56,15 @@ export default function SettingsScreen() {
     ]);
     setExerciseCount(count);
     setSyncedAt(synced);
+    setRest(await loadRestSettings());
+  }
+
+  function changeRest(patch: Partial<RestSettings>) {
+    const next = { ...rest, ...patch };
+    setRest(next);
+    saveRestSettings(next).catch(err =>
+      Alert.alert('Kunde inte spara', err instanceof Error ? err.message : String(err))
+    );
   }
 
   async function handleSync() {
@@ -164,6 +183,72 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
+        <Text style={s.sectionLabel}>VILA MELLAN SET</Text>
+        <View style={s.card}>
+          <View style={s.infoRow}>
+            <Ionicons name="hourglass-outline" size={20} color={COLORS.accent} />
+            <View style={s.infoText}>
+              <Text style={s.infoTitle}>Vilotimer</Text>
+              <Text style={s.infoSub}>Starta en nedräkning när ett set bockas av</Text>
+            </View>
+            <Switch
+              value={rest.enabled}
+              onValueChange={v => changeRest({ enabled: v })}
+              trackColor={{ true: COLORS.accent, false: COLORS.surface2 }}
+              thumbColor="#fff"
+            />
+          </View>
+          {rest.enabled && (
+            <>
+              <View style={s.divider} />
+              <View style={s.infoRow}>
+                <Ionicons name="notifications-outline" size={20} color={COLORS.accent} />
+                <View style={s.infoText}>
+                  <Text style={s.infoTitle}>Notis när vilan är slut</Text>
+                  <Text style={s.infoSub}>Ljud och vibration, även med skärmen släckt</Text>
+                </View>
+                <Switch
+                  value={rest.alert}
+                  onValueChange={v => changeRest({ alert: v })}
+                  trackColor={{ true: COLORS.accent, false: COLORS.surface2 }}
+                  thumbColor="#fff"
+                />
+              </View>
+              <View style={s.divider} />
+              <View style={s.restBlock}>
+                <Text style={s.infoTitle}>Vilotid: {fmtRest(rest.seconds)}</Text>
+                <View style={s.chips}>
+                  {REST_CHOICES.map(sec => (
+                    <TouchableOpacity
+                      key={sec}
+                      style={[s.chip, rest.seconds === sec && s.chipActive]}
+                      onPress={() => changeRest({ seconds: sec })}
+                    >
+                      <Text style={[s.chipText, rest.seconds === sec && s.chipTextActive]}>
+                        {fmtRest(sec)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+              <View style={s.divider} />
+              <View style={s.infoRow}>
+                <Ionicons name="list-outline" size={20} color={COLORS.textMuted} />
+                <View style={s.infoText}>
+                  <Text style={s.infoTitle}>Använd vilan från passen</Text>
+                  <Text style={s.infoSub}>Följ vilotiden per övning i sparade pass i stället</Text>
+                </View>
+                <Switch
+                  value={rest.useTemplateRest}
+                  onValueChange={v => changeRest({ useTemplateRest: v })}
+                  trackColor={{ true: COLORS.accent, false: COLORS.surface2 }}
+                  thumbColor="#fff"
+                />
+              </View>
+            </>
+          )}
+        </View>
+
         {/* About */}
         <Text style={s.sectionLabel}>PÅMINNELSER</Text>
         <View style={s.card}>
@@ -258,6 +343,19 @@ const s = StyleSheet.create({
   infoTitle: { color: COLORS.text, fontSize: 14, fontWeight: '500' },
   infoSub: { color: COLORS.textMuted, fontSize: 12, marginTop: 2 },
   divider: { height: 1, backgroundColor: COLORS.border },
+  restBlock: { padding: 14, gap: 10 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.surface2,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  chipActive: { backgroundColor: COLORS.accentDim, borderColor: COLORS.accentBorder },
+  chipText: { color: COLORS.textMuted, fontSize: 13, fontWeight: '600' },
+  chipTextActive: { color: COLORS.text },
 
   syncRow: {
     flexDirection: 'row',

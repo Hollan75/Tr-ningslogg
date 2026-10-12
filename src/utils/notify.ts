@@ -44,7 +44,7 @@ export async function scheduleTimerAlert(seconds: number, title: string, body: s
   try {
     if (!(await ensureNotificationPermission())) return null;
     return await Notifications.scheduleNotificationAsync({
-      content: { title, body, sound: 'default' },
+      content: { title, body, sound: 'default', data: { kind: 'timer' } },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
         seconds: Math.max(1, Math.round(seconds)),
@@ -65,11 +65,25 @@ export async function cancelAlert(id: string | null | undefined): Promise<void> 
   }
 }
 
+// Removes timer alerts that are still showing in the notification shade
+export async function dismissTimerAlerts(): Promise<void> {
+  try {
+    const shown = await Notifications.getPresentedNotificationsAsync();
+    for (const n of shown) {
+      if (n.request.content.data?.kind === 'timer') {
+        await Notifications.dismissNotificationAsync(n.request.identifier);
+      }
+    }
+  } catch {
+    // nothing to dismiss
+  }
+}
+
 // Rings right away (used when a timer ends while the app is open)
 export async function ringNow(title: string, body: string): Promise<void> {
   try {
     await Notifications.scheduleNotificationAsync({
-      content: { title, body, sound: 'default' },
+      content: { title, body, sound: 'default', data: { kind: 'timer' } },
       trigger: Platform.OS === 'android' ? { channelId: TIMER_CHANNEL } : null,
     });
   } catch {

@@ -15,7 +15,11 @@
         "backgroundColor": "#0f0f13"
       },
       "package": "com.hollan75.traningslogg",
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.USE_EXACT_ALARM",
+        "android.permission.SCHEDULE_EXACT_ALARM"
+      ]
     },
     "ios": {
       "supportsTablet": false,
