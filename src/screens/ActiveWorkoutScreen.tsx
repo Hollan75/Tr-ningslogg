@@ -33,9 +33,11 @@ import {
   getPreviousPerformance,
   getActiveSession,
   startSession,
+  getExerciseById,
 } from '../database';
 import ExercisePicker from '../components/ExercisePicker';
 import ExerciseHistoryList from '../components/ExerciseHistoryList';
+import ExerciseInfo from '../components/ExerciseInfo';
 import { fmtDuration, fmtKg, fmtSet, parseNum } from '../utils/format';
 import { scheduleTimerAlert, cancelAlert, ringNow, dismissTimerAlerts } from '../utils/notify';
 import { loadRestSettings, DEFAULT_REST_SETTINGS } from '../utils/restSettings';
@@ -191,6 +193,7 @@ export default function ActiveWorkoutScreen() {
   const [exercises, setExercises] = useState<ExState[]>([]);
   const [showPicker, setShowPicker] = useState(false);
   const [historyFor, setHistoryFor] = useState<ExState | null>(null);
+  const [infoFor, setInfoFor] = useState<Exercise | null>(null);
   const [finishing, setFinishing] = useState(false);
   const [showFinish, setShowFinish] = useState(false);
   const [work, setWork] = useState<WorkTimer | null>(null);
@@ -487,6 +490,13 @@ export default function ActiveWorkoutScreen() {
     return () => clearInterval(iv);
   }, [work]);
 
+  // Opens the exercise description (instructions, muscles, history)
+  async function openInfo(ex: ExState) {
+    const exercise = await getExerciseById(ex.exerciseId);
+    if (exercise) setInfoFor(exercise);
+    else setHistoryFor(ex);
+  }
+
   function toggleMode(ex: ExState) {
     if (ex.rows.some(r => r.dbId)) {
       Alert.alert('Kan inte byta', 'Ta bort de loggade seten först för att byta mellan reps och tid.');
@@ -671,8 +681,11 @@ export default function ActiveWorkoutScreen() {
               return (
                 <View key={ex.key} style={[s.exCard, allDone && s.exCardDone]}>
                   <View style={s.exHeader}>
-                    <TouchableOpacity style={{ flex: 1 }} onPress={() => setHistoryFor(ex)}>
-                      <Text style={s.exName}>{ex.name}</Text>
+                    <TouchableOpacity style={{ flex: 1 }} onPress={() => openInfo(ex)}>
+                      <Text style={s.exName}>
+                        {ex.name}{' '}
+                        <Ionicons name="information-circle-outline" size={15} color={COLORS.accent} />
+                      </Text>
                       <Text style={s.exMeta}>
                         {[targetText, ex.prev.length ? `Förra: ${fmtSet(ex.prev[0])}` : 'Första gången']
                           .filter(Boolean)
@@ -944,6 +957,27 @@ export default function ActiveWorkoutScreen() {
             </TouchableOpacity>
           </View>
         </View>
+      </Modal>
+
+      <Modal
+        visible={infoFor != null}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setInfoFor(null)}
+      >
+        <SafeAreaProvider>
+          <SafeAreaView style={s.modalSafe} edges={['top', 'bottom']}>
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle} numberOfLines={1}>Övning</Text>
+              <TouchableOpacity style={s.iconBtn} onPress={() => setInfoFor(null)}>
+                <Ionicons name="close" size={22} color={COLORS.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={{ padding: 16 }}>
+              {infoFor && <ExerciseInfo exercise={infoFor} />}
+            </ScrollView>
+          </SafeAreaView>
+        </SafeAreaProvider>
       </Modal>
 
       <Modal
