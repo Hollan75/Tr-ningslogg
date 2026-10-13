@@ -1,1275 +1,902 @@
-<!DOCTYPE html>
-<html lang="sv">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Veckans Mat</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg: #faf8f5;
-      --white: #ffffff;
-      --text: #1c1917;
-      --text-muted: #78716c;
-      --primary: #ea580c;
-      --primary-light: #fff7ed;
-      --primary-hover: #c2410c;
-      --green: #16a34a;
-      --green-light: #f0fdf4;
-      --green-hover: #15803d;
-      --red: #dc2626;
-      --red-light: #fef2f2;
-      --border: #e7e5e4;
-      --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
-      --shadow: 0 4px 16px rgba(0,0,0,0.10);
-      --radius: 16px;
-      --radius-sm: 10px;
-    }
-
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      min-height: 100vh;
-      padding-bottom: 100px;
-    }
-
-    /* ── HEADER ── */
-    .app-header {
-      background: var(--white);
-      border-bottom: 1px solid var(--border);
-      padding: 18px 20px 14px;
-      text-align: center;
-      position: sticky;
-      top: 0;
-      z-index: 50;
-      box-shadow: var(--shadow-sm);
-    }
-
-    .app-header h1 {
-      font-size: 1.5rem;
-      font-weight: 800;
-      letter-spacing: -0.5px;
-    }
-
-    .app-header .subtitle {
-      font-size: 0.82rem;
-      color: var(--text-muted);
-      margin-top: 2px;
-    }
-
-    .mode-badge {
-      display: inline-block;
-      font-size: 0.72rem;
-      font-weight: 700;
-      padding: 3px 10px;
-      border-radius: 20px;
-      margin-top: 6px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .badge-admin { background: #fff7ed; color: #ea580c; }
-    .badge-vote  { background: #f0fdf4; color: #16a34a; }
-    .badge-resp  { background: #eff6ff; color: #2563eb; }
-
-    /* ── WEEK NAV (admin only) ── */
-    .week-nav {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 16px;
-      padding: 14px 20px;
-      background: var(--white);
-      border-bottom: 1px solid var(--border);
-    }
-
-    .week-nav span {
-      font-weight: 700;
-      font-size: 0.92rem;
-      min-width: 160px;
-      text-align: center;
-    }
-
-    .week-nav button {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 50%;
-      width: 36px;
-      height: 36px;
-      font-size: 1rem;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background 0.15s;
-    }
-
-    .week-nav button:hover { background: var(--border); }
-
-    /* ── CONTAINER ── */
-    .container {
-      max-width: 720px;
-      margin: 0 auto;
-      padding: 20px 16px;
-    }
-
-    /* ── VOTER NAME AREA ── */
-    .voter-banner {
-      background: var(--green-light);
-      border: 1.5px solid #bbf7d0;
-      border-radius: var(--radius);
-      padding: 16px 20px;
-      margin-bottom: 20px;
-    }
-
-    .voter-banner p {
-      font-size: 0.88rem;
-      color: #15803d;
-      margin-bottom: 10px;
-      font-weight: 500;
-    }
-
-    .voter-input-row {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-    }
-
-    .voter-input-row input {
-      flex: 1;
-      padding: 10px 14px;
-      border: 1.5px solid #86efac;
-      border-radius: var(--radius-sm);
-      font-size: 0.95rem;
-      background: var(--white);
-      font-family: inherit;
-      color: var(--text);
-    }
-
-    .voter-input-row input:focus {
-      outline: none;
-      border-color: var(--green);
-    }
-
-    /* ── RESPONSE BANNER ── */
-    .response-banner {
-      background: #eff6ff;
-      border: 1.5px solid #bfdbfe;
-      border-radius: var(--radius);
-      padding: 16px 20px;
-      margin-bottom: 20px;
-    }
-
-    .response-banner h3 {
-      font-size: 1rem;
-      color: #1d4ed8;
-      margin-bottom: 6px;
-    }
-
-    .response-banner p {
-      font-size: 0.85rem;
-      color: #3b82f6;
-    }
-
-    .picks-summary {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 10px;
-    }
-
-    .pick-pill {
-      background: #dbeafe;
-      color: #1e40af;
-      padding: 4px 12px;
-      border-radius: 20px;
-      font-size: 0.8rem;
-      font-weight: 600;
-    }
-
-    /* ── DAY CARDS ── */
-    .day-card {
-      background: var(--white);
-      border-radius: var(--radius);
-      margin-bottom: 14px;
-      box-shadow: var(--shadow-sm);
-      overflow: hidden;
-      border: 1px solid var(--border);
-    }
-
-    .day-header {
-      padding: 12px 18px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .day-emoji { font-size: 1.4rem; }
-
-    .day-header-text { flex: 1; }
-
-    .day-name {
-      font-weight: 700;
-      font-size: 1rem;
-    }
-
-    .day-date {
-      font-size: 0.78rem;
-      color: var(--text-muted);
-    }
-
-    .day-body { padding: 0 18px 14px; }
-
-    /* Meal list */
-    .meal-list { list-style: none; margin-bottom: 10px; }
-
-    .meal-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 9px 0;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .meal-item:last-child { border-bottom: none; }
-
-    .meal-name {
-      flex: 1;
-      font-size: 0.92rem;
-      font-weight: 500;
-    }
-
-    .meal-by {
-      font-size: 0.72rem;
-      color: var(--text-muted);
-    }
-
-    /* Vote toggle button */
-    .vote-btn {
-      background: none;
-      border: 2px solid var(--border);
-      border-radius: 50%;
-      width: 36px;
-      height: 36px;
-      font-size: 1rem;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.15s;
-      flex-shrink: 0;
-    }
-
-    .vote-btn:hover {
-      border-color: var(--green);
-      background: var(--green-light);
-    }
-
-    .vote-btn.voted {
-      background: var(--green);
-      border-color: var(--green);
-      color: white;
-    }
-
-    /* Picked highlight in response view */
-    .meal-item.picked .meal-name {
-      color: #1d4ed8;
-      font-weight: 700;
-    }
-
-    .meal-item.picked { background: #eff6ff; border-radius: 8px; padding: 9px 8px; }
-
-    /* Delete button (admin) */
-    .del-btn {
-      background: none;
-      border: none;
-      color: #d1d5db;
-      font-size: 1rem;
-      cursor: pointer;
-      padding: 4px;
-      border-radius: 6px;
-      transition: color 0.15s;
-      flex-shrink: 0;
-    }
-
-    .del-btn:hover { color: var(--red); }
-
-    /* ── ADD MEAL ROW ── */
-    .add-meal-row {
-      display: flex;
-      gap: 8px;
-      margin-top: 6px;
-    }
-
-    .add-meal-row input {
-      flex: 1;
-      padding: 9px 12px;
-      border: 1.5px solid var(--border);
-      border-radius: var(--radius-sm);
-      font-size: 0.88rem;
-      background: var(--bg);
-      font-family: inherit;
-      color: var(--text);
-      transition: border-color 0.15s;
-    }
-
-    .add-meal-row input:focus {
-      outline: none;
-      border-color: var(--primary);
-      background: var(--white);
-    }
-
-    .add-meal-row input::placeholder { color: #a8a29e; }
-
-    /* ── BUTTONS ── */
-    button { cursor: pointer; font-family: inherit; border: none; transition: all 0.15s; }
-
-    .btn {
-      padding: 9px 16px;
-      border-radius: var(--radius-sm);
-      font-size: 0.85rem;
-      font-weight: 600;
-    }
-
-    .btn-primary {
-      background: var(--primary);
-      color: white;
-    }
-
-    .btn-primary:hover { background: var(--primary-hover); }
-
-    .btn-green {
-      background: var(--green);
-      color: white;
-    }
-
-    .btn-green:hover { background: var(--green-hover); }
-
-    .btn-ghost {
-      background: var(--bg);
-      border: 1.5px solid var(--border);
-      color: var(--text-muted);
-    }
-
-    .btn-ghost:hover { background: var(--border); color: var(--text); }
-
-    .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
-
-    .btn-suggest {
-      background: #f3f4f6;
-      color: #6b7280;
-      border: 1px solid #e5e7eb;
-      padding: 6px 10px;
-      border-radius: 8px;
-      font-size: 0.78rem;
-      font-weight: 600;
-      white-space: nowrap;
-      flex-shrink: 0;
-    }
-
-    .btn-suggest:hover { background: #fef3c7; color: #d97706; border-color: #fcd34d; }
-
-    /* ── ONLINE SUGGESTIONS PANEL ── */
-    .online-panel {
-      margin-top: 8px;
-      background: #fffbeb;
-      border: 1.5px solid #fde68a;
-      border-radius: var(--radius-sm);
-      padding: 10px 12px;
-    }
-
-    .online-panel-header {
-      font-size: 0.78rem;
-      color: #92400e;
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
-
-    .online-suggestions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-
-    .online-pill {
-      background: var(--white);
-      border: 1.5px solid #fcd34d;
-      color: #78350f;
-      padding: 5px 12px;
-      border-radius: 20px;
-      font-size: 0.8rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-
-    .online-pill:hover {
-      background: #fef08a;
-      border-color: #f59e0b;
-    }
-
-    .loading-spinner {
-      font-size: 0.8rem;
-      color: #92400e;
-    }
-
-    /* ── FLOATING ACTION BUTTONS ── */
-    .fab-area {
-      position: fixed;
-      bottom: 24px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      gap: 12px;
-      z-index: 100;
-    }
-
-    .fab {
-      padding: 14px 24px;
-      border-radius: 50px;
-      font-size: 0.95rem;
-      font-weight: 700;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      border: none;
-      cursor: pointer;
-      transition: all 0.15s;
-      white-space: nowrap;
-    }
-
-    .fab:active { transform: scale(0.97); }
-
-    .fab-share {
-      background: var(--primary);
-      color: white;
-    }
-
-    .fab-share:hover { background: var(--primary-hover); }
-
-    .fab-send {
-      background: var(--green);
-      color: white;
-    }
-
-    .fab-send:hover { background: var(--green-hover); }
-
-    /* ── MODAL ── */
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.5);
-      display: flex;
-      align-items: flex-end;
-      justify-content: center;
-      z-index: 200;
-      padding: 20px;
-      backdrop-filter: blur(2px);
-    }
-
-    .modal-overlay.hidden { display: none; }
-
-    .modal {
-      background: var(--white);
-      border-radius: var(--radius) var(--radius) 0 0;
-      padding: 28px 24px 36px;
-      width: 100%;
-      max-width: 500px;
-      animation: slideUp 0.25s ease;
-    }
-
-    @keyframes slideUp {
-      from { transform: translateY(40px); opacity: 0; }
-      to   { transform: translateY(0);    opacity: 1; }
-    }
-
-    .modal h2 {
-      font-size: 1.2rem;
-      font-weight: 800;
-      margin-bottom: 6px;
-    }
-
-    .modal p {
-      font-size: 0.88rem;
-      color: var(--text-muted);
-      margin-bottom: 16px;
-      line-height: 1.5;
-    }
-
-    .share-url-box {
-      background: var(--bg);
-      border: 1.5px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 12px 14px;
-      font-size: 0.78rem;
-      word-break: break-all;
-      color: var(--text-muted);
-      margin-bottom: 14px;
-      min-height: 50px;
-      line-height: 1.5;
-    }
-
-    .modal-actions {
-      display: flex;
-      gap: 10px;
-    }
-
-    .modal-actions .btn { flex: 1; text-align: center; }
-
-    /* ── TOAST ── */
-    #toast {
-      position: fixed;
-      bottom: 90px;
-      left: 50%;
-      transform: translateX(-50%) translateY(16px);
-      background: #1c1917;
-      color: #fff;
-      font-size: 0.85rem;
-      font-weight: 600;
-      padding: 10px 20px;
-      border-radius: 50px;
-      opacity: 0;
-      pointer-events: none;
-      z-index: 300;
-      transition: opacity 0.25s, transform 0.25s;
-      white-space: nowrap;
-    }
-
-    #toast.show {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
-
-    /* ── EMPTY STATE ── */
-    .empty-meals {
-      font-size: 0.82rem;
-      color: #a8a29e;
-      padding: 6px 0 4px;
-      font-style: italic;
-    }
-
-    /* ── UTILS ── */
-    .no-meals-note {
-      text-align: center;
-      padding: 40px 20px;
-      color: var(--text-muted);
-      font-size: 0.9rem;
-    }
-
-    @media (max-width: 480px) {
-      .fab { padding: 12px 18px; font-size: 0.88rem; }
-      .container { padding: 14px 12px; }
-      .modal { padding: 22px 18px 30px; }
-    }
-  </style>
-</head>
-<body>
-
-<!-- ══ ADMIN VIEW ══════════════════════════════════════════════════ -->
-<div id="admin-view">
-  <header class="app-header">
-    <h1>🍽️ Veckans Mat</h1>
-    <div class="subtitle">Planera vad ni ska äta</div>
-    <span class="mode-badge badge-admin">Föräldraläge</span>
+<title>Veckans Mat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap">
+<style>
+/* ── TOKENS ─── dark-first, cool slate + single indigo accent ─────────── */
+:root {
+  --bg:   #0e0e14; --s1: #16161e; --s2: #1c1c28; --bd: #26263a;
+  --t1:   #eeeef8; --t2: #72729a;
+  --ac:   #6b6de8; --ac-d: rgba(107,109,232,.14);
+  --gn:   #2dd484; --gn-d: rgba(45,212,132,.11);
+  --rd:   #ff5252; --rd-d: rgba(255,82,82,.12);
+  --am:   #f5a623; --am-d: rgba(245,166,35,.13);
+  --r: 12px; color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #edeef4; --s1: #fff; --s2: #e6e7f0; --bd: #cccde0;
+    --t1: #111120; --t2: #6062a0;
+    --ac: #4446cc; --ac-d: rgba(68,70,204,.10);
+    --gn: #0a9e60; --gn-d: rgba(10,158,96,.10);
+    --rd: #cc2020; --rd-d: rgba(204,32,32,.10);
+    --am: #d4820a; --am-d: rgba(212,130,10,.12);
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #edeef4; --s1: #fff; --s2: #e6e7f0; --bd: #cccde0;
+  --t1: #111120; --t2: #6062a0;
+  --ac: #4446cc; --ac-d: rgba(68,70,204,.10);
+  --gn: #0a9e60; --gn-d: rgba(10,158,96,.10);
+  --rd: #cc2020; --rd-d: rgba(204,32,32,.10);
+  --am: #d4820a; --am-d: rgba(212,130,10,.12);
+  color-scheme: light;
+}
+.d0{--da:#6b6de8} .d1{--da:#9b6fd8} .d2{--da:#2dd484}
+.d3{--da:#5ab4e8} .d4{--da:#e87060} .d5{--da:#e8c060} .d6{--da:#de7fbf}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--t1);
+  font-family:'Outfit',system-ui,-apple-system,sans-serif;
+  min-height:100%;padding-bottom:80px;font-size:15px;
+}
+button{cursor:pointer;font-family:inherit;transition:.12s all}
+
+.hdr{
+  background:var(--s1);border-bottom:1px solid var(--bd);
+  padding:12px 18px;display:flex;align-items:center;gap:12px;
+  position:sticky;top:env(safe-area-inset-top,0px);z-index:50;
+}
+.hdr-info{flex:1}
+.hdr-info h1{font-size:1.05rem;font-weight:700;letter-spacing:-.3px}
+.hdr-sub{font-size:.72rem;color:var(--t2);margin-top:1px}
+.chip{font-size:.65rem;font-weight:700;padding:3px 9px;border-radius:20px;text-transform:uppercase;letter-spacing:.7px}
+.chip-p{background:var(--ac-d);color:var(--ac)}
+.chip-c{background:var(--gn-d);color:var(--gn)}
+
+.wnav{
+  background:var(--s1);border-bottom:1px solid var(--bd);
+  display:flex;align-items:center;justify-content:space-between;padding:10px 18px;
+}
+.wnav-lbl{font-size:.85rem;font-weight:600}
+.wnav-btn{
+  background:var(--s2);border:1px solid var(--bd);color:var(--t1);
+  width:32px;height:32px;border-radius:50%;font-size:.95rem;
+  display:flex;align-items:center;justify-content:center;
+}
+.wnav-btn:hover{background:var(--bd)}
+
+.cnt{max-width:680px;margin:0 auto;padding:14px 16px}
+
+.name-row{
+  background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);
+  padding:12px 16px;display:flex;align-items:center;gap:10px;margin-bottom:14px;
+}
+.name-row label{font-size:.8rem;color:var(--t2);white-space:nowrap}
+.name-inp{
+  flex:1;min-width:0;background:var(--s2);border:1px solid var(--bd);
+  border-radius:7px;padding:7px 11px;font-size:.88rem;font-family:inherit;color:var(--t1);
+}
+.name-inp:focus{outline:none;border-color:var(--ac)}
+
+.dc{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);margin-bottom:10px;overflow:hidden}
+.dc-strip{height:2px;background:var(--da)}
+.dc-head{padding:10px 16px 8px;display:flex;align-items:baseline;gap:8px}
+.dc-name{font-weight:700;font-size:.92rem}
+.dc-date{font-size:.72rem;color:var(--t2)}
+.dc-vc{margin-left:auto;font-size:.7rem;color:var(--t2)}
+.dc-body{padding:0 16px 12px}
+
+.ml{list-style:none}
+.mi{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding:7px 0;border-bottom:1px solid var(--bd)}
+.mi:last-child{border-bottom:none}
+.mi-name{flex:1;min-width:0;font-size:.88rem}
+.mi-by{font-size:.68rem;color:var(--t2);white-space:nowrap}
+.mi-vc{font-size:.68rem;color:var(--gn);background:var(--gn-d);padding:2px 7px;border-radius:20px;white-space:nowrap}
+.mi-vd{font-size:.68rem;color:var(--rd);background:var(--rd-d);padding:2px 7px;border-radius:20px;white-space:nowrap}
+.mi-voters{flex:0 0 100%;display:flex;flex-wrap:wrap;gap:4px;padding:2px 0 2px 38px}
+.mi-voter{font-size:.66rem;padding:2px 8px;border-radius:20px;background:var(--gn-d);border:1px solid var(--gn);color:var(--gn)}
+.mi-dvoter{font-size:.66rem;padding:2px 8px;border-radius:20px;background:var(--rd-d);border:1px solid var(--rd);color:var(--rd)}
+
+/* vote buttons */
+.vbtn{
+  width:30px;height:30px;border-radius:50%;border:1.5px solid var(--bd);background:none;
+  display:flex;align-items:center;justify-content:center;font-size:.75rem;color:var(--t2);flex-shrink:0;
+}
+.vbtn:hover{border-color:var(--gn);color:var(--gn);background:var(--gn-d)}
+.vbtn.on{background:var(--gn);border-color:var(--gn);color:#0e0e14}
+.vbtn-d{
+  width:30px;height:30px;border-radius:50%;border:1.5px solid var(--bd);background:none;
+  display:flex;align-items:center;justify-content:center;font-size:.75rem;color:var(--t2);flex-shrink:0;
+}
+.vbtn-d:hover{border-color:var(--rd);color:var(--rd);background:var(--rd-d)}
+.vbtn-d.on{background:var(--rd);border-color:var(--rd);color:#fff}
+
+.dbtn{width:26px;height:26px;border:none;background:none;color:var(--t2);font-size:.72rem;border-radius:5px;flex-shrink:0}
+.dbtn:hover{color:var(--rd)}
+
+.ar{display:flex;gap:7px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--bd)}
+.ar-inp{
+  flex:1;min-width:0;background:var(--s2);border:1px solid var(--bd);
+  border-radius:7px;padding:7px 10px;font-size:.84rem;font-family:inherit;color:var(--t1);
+}
+.ar-inp:focus{outline:none;border-color:var(--ac)}
+.ar-inp::placeholder{color:var(--t2)}
+
+.btn{font-size:.8rem;font-weight:600;padding:7px 13px;border-radius:7px;border:none;white-space:nowrap}
+.btn-a{background:var(--ac);color:#fff}
+.btn-g{background:var(--s2);border:1px solid var(--bd);color:var(--t2)}
+.btn-a:hover{opacity:.9}
+.btn-g:hover{color:var(--t1)}
+.btn-am{background:var(--am-d);border:1px solid var(--am);color:var(--am)}
+.btn-am:hover{opacity:.9}
+.btn-sm{padding:5px 10px;font-size:.74rem}
+
+.spbtn{
+  font-size:.73rem;font-weight:600;padding:5px 10px;border-radius:20px;
+  border:1px solid var(--bd);background:var(--s2);color:var(--t2);white-space:nowrap;flex-shrink:0;
+}
+.spbtn:hover{border-color:var(--ac);color:var(--ac)}
+.spbtn.open{border-color:var(--ac);color:var(--ac);background:var(--ac-d)}
+
+/* ── SUGGESTION PANEL ────────────────────────────────────────────────── */
+.sppanel{margin-top:7px;background:var(--s2);border:1px solid var(--bd);border-radius:8px;padding:10px}
+.sppanel-lbl{font-size:.68rem;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px}
+.sppills{display:flex;flex-wrap:wrap;gap:5px}
+.sppill{
+  font-family:inherit;font-size:.76rem;padding:5px 12px;border-radius:20px;
+  border:1px solid var(--bd);background:var(--s1);color:var(--t1);
+}
+.sppill:hover{border-color:var(--ac);color:var(--ac)}
+.sppill.lib{border-color:var(--am);color:var(--am)}
+.sppill.lib:hover{background:var(--am-d)}
+.spp-fler{
+  font-family:inherit;font-size:.72rem;font-weight:600;padding:4px 10px;
+  border-radius:20px;border:1px solid var(--bd);background:none;color:var(--t2);margin-top:6px;
+}
+.spp-fler:hover{border-color:var(--ac);color:var(--ac)}
+
+/* import section inside panel */
+.spp-sec{border-top:1px dashed var(--bd);margin-top:10px;padding-top:10px}
+.spp-row{display:flex;gap:6px;margin-top:5px}
+.spp-inp{
+  flex:1;min-width:0;background:var(--s1);border:1px solid var(--bd);
+  border-radius:6px;padding:6px 9px;font-size:.8rem;font-family:inherit;color:var(--t1);
+}
+.spp-inp:focus{outline:none;border-color:var(--ac)}
+.spp-inp::placeholder{color:var(--t2)}
+.spp-ta{width:100%;min-height:68px;resize:vertical}
+
+/* library section */
+.lib-list{display:flex;flex-direction:column;gap:4px;margin-top:6px;max-height:200px;overflow-y:auto}
+.lib-item{
+  display:flex;align-items:center;gap:8px;padding:5px 8px;
+  background:var(--s1);border:1px solid var(--bd);border-radius:7px;
+}
+.lib-item-name{flex:1;font-size:.82rem;min-width:0}
+.lib-add{font-size:.72rem;font-weight:600;padding:3px 9px;border-radius:20px;border:1px solid var(--am);background:var(--am-d);color:var(--am)}
+.lib-add:hover{opacity:.85}
+.lib-del{font-size:.7rem;background:none;border:none;color:var(--t2);padding:2px 4px}
+.lib-del:hover{color:var(--rd)}
+
+.loading{display:flex;align-items:center;justify-content:center;min-height:60vh;color:var(--t2);font-size:.9rem}
+.err-box{
+  margin:40px auto;background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);
+  padding:28px 24px;text-align:center;max-width:480px;
+}
+.err-box h2{font-size:1.1rem;margin-bottom:8px}
+.err-box p{font-size:.85rem;color:var(--t2);line-height:1.5}
+
+#toast{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(6px);
+  background:var(--t1);color:var(--bg);font-size:.8rem;font-weight:600;
+  padding:8px 18px;border-radius:20px;opacity:0;pointer-events:none;z-index:400;
+  transition:all .2s;white-space:nowrap;
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+.ac-wrap{flex:1;min-width:0;position:relative}
+.ac-drop{
+  position:absolute;top:calc(100% + 3px);left:0;right:0;z-index:100;
+  background:var(--s1);border:1px solid var(--bd);border-radius:8px;
+  box-shadow:0 6px 20px rgba(0,0,0,.3);overflow:hidden;
+}
+.ac-item{
+  padding:8px 12px;font-size:.84rem;cursor:pointer;
+  border-bottom:1px solid var(--bd);transition:.08s background;
+}
+.ac-item:last-child{border-bottom:none}
+.ac-item:hover,.ac-item.focused{background:var(--s2);color:var(--ac)}
+.ac-item.lib{color:var(--am)}
+.ac-item.lib:hover,.ac-item.lib.focused{background:var(--am-d);color:var(--am)}
+
+.mbtn{width:26px;height:26px;border:none;background:none;color:var(--t2);font-size:.8rem;border-radius:5px;flex-shrink:0}
+.mbtn:hover{color:var(--ac)}
+.mbtn.on{color:var(--ac)}
+.move-picker{flex:0 0 100%;display:flex;flex-wrap:wrap;gap:4px;padding:4px 0 2px 34px}
+.move-day{
+  font-family:inherit;font-size:.7rem;font-weight:600;padding:3px 9px;
+  border-radius:20px;border:1px solid var(--bd);background:var(--s2);color:var(--t2);
+}
+.move-day:not(:disabled):hover{border-color:var(--ac);color:var(--ac);background:var(--ac-d)}
+.move-day:disabled{opacity:.35;cursor:default}
+@media (max-width:480px){.cnt{padding:12px 12px}}
+</style>
+
+<div class="loading" id="loading-screen">Laddar…</div>
+
+<div id="main-app" hidden>
+  <header class="hdr">
+    <div class="hdr-info">
+      <h1>Veckans Mat</h1>
+      <p class="hdr-sub" id="hdr-sub"></p>
+    </div>
+    <span class="chip" id="role-chip"></span>
   </header>
-
-  <div class="week-nav">
-    <button id="prev-week-btn" title="Föregående vecka">‹</button>
-    <span id="week-label">Laddar…</span>
-    <button id="next-week-btn" title="Nästa vecka">›</button>
+  <div class="wnav" id="week-nav" hidden>
+    <button class="wnav-btn" id="prev-w">‹</button>
+    <span class="wnav-lbl" id="wnav-lbl"></span>
+    <button class="wnav-btn" id="next-w">›</button>
   </div>
-
-  <div class="container">
-    <div id="admin-days"></div>
-  </div>
-
-  <div class="fab-area">
-    <button class="fab fab-share" id="share-btn">
-      📤 Dela med barnen
-    </button>
-  </div>
-</div>
-
-<!-- ══ VOTE VIEW ══════════════════════════════════════════════════ -->
-<div id="vote-view" style="display:none">
-  <header class="app-header">
-    <h1>🗳️ Vad vill ni äta?</h1>
-    <div class="subtitle" id="vote-week-label"></div>
-    <span class="mode-badge badge-vote">Röstningsläge</span>
-  </header>
-
-  <div class="container">
-    <div class="voter-banner">
-      <p>Tryck på 👍 för det du vill äta, och lägg gärna till egna förslag!</p>
-      <div class="voter-input-row">
-        <input type="text" id="voter-name-input" placeholder="Ditt namn (t.ex. Emma)" maxlength="30" />
-      </div>
+  <div class="cnt">
+    <div class="name-row" id="name-row" hidden>
+      <label for="name-inp">Ditt namn:</label>
+      <input type="text" id="name-inp" class="name-inp" placeholder="T.ex. Emma" maxlength="30" />
     </div>
-    <div id="vote-days"></div>
-  </div>
-
-  <div class="fab-area">
-    <button class="fab fab-send" id="send-vote-btn">
-      💌 Skicka mina val
-    </button>
-  </div>
-</div>
-
-<!-- ══ RESPONSE VIEW ══════════════════════════════════════════════ -->
-<div id="response-view" style="display:none">
-  <header class="app-header">
-    <h1>💬 Matsvar</h1>
-    <div class="subtitle" id="resp-week-label"></div>
-    <span class="mode-badge badge-resp">Svar från barn</span>
-  </header>
-
-  <div class="container">
-    <div class="response-banner">
-      <h3 id="resp-voter-name"></h3>
-      <p>Markerade rätter är de hen röstade på.</p>
-      <div class="picks-summary" id="resp-summary"></div>
-    </div>
-    <div id="resp-days"></div>
-  </div>
-
-  <div class="fab-area">
-    <button class="fab fab-share" id="back-to-admin-btn" style="background:#6b7280;">
-      ← Tillbaka till planering
-    </button>
-  </div>
-</div>
-
-<!-- ══ SHARE MODAL ══════════════════════════════════════════════ -->
-<div class="modal-overlay hidden" id="share-modal">
-  <div class="modal">
-    <h2>📤 Dela med barnen</h2>
-    <p>Kopiera länken nedan och skicka den till barnen via t.ex. WhatsApp eller SMS. De kan sedan rösta och lägga till egna förslag.</p>
-    <div class="share-url-box" id="share-url-text"></div>
-    <div class="modal-actions">
-      <button class="btn btn-primary" id="copy-share-btn">📋 Kopiera länk</button>
-      <button class="btn btn-ghost" id="close-share-modal">Stäng</button>
-    </div>
-  </div>
-</div>
-
-<!-- ══ SEND VOTE MODAL ══════════════════════════════════════════ -->
-<div class="modal-overlay hidden" id="send-modal">
-  <div class="modal">
-    <h2>💌 Skicka mina val</h2>
-    <p>Kopiera länken och skicka till Papa/Mamma! De ser exakt vad du röstade på.</p>
-    <div class="share-url-box" id="send-url-text"></div>
-    <div class="modal-actions">
-      <button class="btn btn-green" id="copy-send-btn">📋 Kopiera länk</button>
-      <button class="btn btn-ghost" id="close-send-modal">Stäng</button>
-    </div>
+    <div id="days-list"></div>
   </div>
 </div>
 
 <div id="toast"></div>
 
 <script>
-// ─── CONSTANTS ────────────────────────────────────────────────────
-const STORAGE_KEY = 'matlista_v1';
-const MEALDB_URL  = 'https://www.themealdb.com/api/json/v1/1/random.php';
+// ── CONSTANTS ──────────────────────────────────────────────────────────
+const DAYS = ['Onsdag','Torsdag','Fredag','Lördag','Söndag','Måndag','Tisdag'];
 
-const DAYS_META = [
-  { name: 'Måndag',  emoji: '☀️',  hue: '#fff7ed' },
-  { name: 'Tisdag',  emoji: '🌟',  hue: '#fdf4ff' },
-  { name: 'Onsdag',  emoji: '🌈',  hue: '#f0fdf4' },
-  { name: 'Torsdag', emoji: '💫',  hue: '#eff6ff' },
-  { name: 'Fredag',  emoji: '🎉',  hue: '#fdf2f8' },
-  { name: 'Lördag',  emoji: '🏖️',  hue: '#fffbeb' },
-  { name: 'Söndag',  emoji: '❤️',  hue: '#fff1f2' },
+const MEALS = [
+  'Köttbullar med potatismos','Tacos','Pannkakor med sylt och grädde',
+  'Pasta Bolognese','Kycklinggryta med ris','Laxpasta med gräddsås',
+  'Pytt i panna','Korv Stroganoff','Ärtsoppa','Fläskfilé med gräddsås',
+  'Lasagne','Hemgjord pizza','Hamburgare','Fiskpinnar med potatismos',
+  'Spaghetti Carbonara','Kyckling i ugn med rotfrukter',
+  'Falukorv med stuvad makaroni','Ugnspannkaka med bacon',
+  'Pannbiff med lök','Chili con carne','Kycklingwraps',
+  'Stekt strömming med potatismos','Wallenbergare',
+  'Potatisgratäng med fläsk','Schnitzel med coleslaw',
+  'Lax i ugn med dillsås','Curry med kyckling','Falafel med pitabröd',
+  'Köttfärssås med pasta','Biff med bearnaisesås',
+  'Kalops med inlagda rödbetor','Janssons frestelse',
+  'Paj med kyckling och purjolök','Laxgratäng',
 ];
 
-// ─── STATE ────────────────────────────────────────────────────────
-let mode = 'admin';   // 'admin' | 'vote' | 'response'
-let plan = null;      // the week plan object
-let myPicks = {};     // dayIdx → Set of meal IDs (vote mode)
-let mySuggestions = {};// dayIdx → [{ id, name }] (vote mode)
-let responseData = null; // full parsed response object
-
-// ─── ENCODING ─────────────────────────────────────────────────────
-function encode(obj) {
-  try {
-    const str = JSON.stringify(obj);
-    return btoa(unescape(encodeURIComponent(str)));
-  } catch { return ''; }
+// ── HELPERS ────────────────────────────────────────────────────────────
+function uid()  { return Math.random().toString(36).slice(2,9) }
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;')
 }
-
-function decode(str) {
+function isoDate(d) {
+  const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),
+        dd=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${dd}`;
+}
+function getWednesday(d) {
+  const r=new Date(d),day=r.getDay();
+  // day>=3 (Wed-Sat): back to Wed; day<3 (Sun-Tue): back to previous Wed
+  const diff=day>=3?-(day-3):-(day+4);
+  r.setDate(r.getDate()+diff);
+  r.setHours(12,0,0,0); return r;
+}
+function addDays(d,n) { const r=new Date(d); r.setDate(r.getDate()+n); return r }
+function weekNum(d) {
+  const dt=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  const day=dt.getUTCDay()||7; dt.setUTCDate(dt.getUTCDate()+4-day);
+  const yr=new Date(Date.UTC(dt.getUTCFullYear(),0,1));
+  return Math.ceil(((dt-yr)/86400000+1)/7);
+}
+function svDate(iso) {
+  const [,m,d]=iso.split('-');
+  return `${parseInt(d)} ${['jan','feb','mar','apr','maj','jun',
+    'jul','aug','sep','okt','nov','dec'][parseInt(m)-1]}`;
+}
+function makePlan(ws) {
+  const mon=new Date(ws+'T12:00:00');
+  return {weekStart:ws, days:DAYS.map((name,i)=>({
+    idx:i, name, date:isoDate(addDays(mon,i)), meals:[]
+  }))};
+}
+function extractNameFromUrl(url) {
   try {
-    return JSON.parse(decodeURIComponent(escape(atob(str))));
+    const u=new URL(url.trim().startsWith('http')?url.trim():'https://'+url.trim());
+    const segs=u.pathname.split('/').filter(s=>s&&s.length>2&&!/^\d+$/.test(s));
+    const last=segs[segs.length-1]; if(!last) return null;
+    return last.replace(/[-_]/g,' ').replace(/\s+/g,' ').trim()
+      .replace(/\b\w/g,c=>c.toUpperCase());
   } catch { return null; }
 }
 
-// ─── DATE HELPERS ─────────────────────────────────────────────────
-function getMonday(d) {
-  const date = new Date(d);
-  const day  = date.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  date.setDate(date.getDate() + diff);
-  date.setHours(0, 0, 0, 0);
-  return date;
+// ── STATE ──────────────────────────────────────────────────────────────
+let db=null, userCap=null;
+let myId=null, myName='', isOwner=false;
+let weekStart=isoDate(getWednesday(new Date()));
+let plan=null;
+let allVotes={};   // { userId: { name, w_YYYY-MM-DD: { picks, downs, suggestions } } }
+let library=[];    // [{ id, name }] from db 'library' collection
+let planUnsub=null, votesUnsub=null, libUnsub=null;
+let openSugPanel=null; // dayIdx or null
+let movingMeal=null;  // {di, id} or null
+
+// ── TOAST ──────────────────────────────────────────────────────────────
+let toastT;
+function toast(msg) {
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('show');
+  clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('show'),2500);
 }
 
-function addDays(d, n) {
-  const r = new Date(d);
-  r.setDate(r.getDate() + n);
-  return r;
-}
-
-function isoDate(d) {
-  return d.toISOString().slice(0, 10);
-}
-
-function svDate(str) {
-  const [y, m, d] = str.split('-');
-  const months = ['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'];
-  return `${parseInt(d)} ${months[parseInt(m) - 1]}`;
-}
-
-function weekNumber(d) {
-  const date  = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  const day   = date.getUTCDay() || 7;
-  date.setUTCDate(date.getUTCDate() + 4 - day);
-  const year  = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-  return Math.ceil((((date - year) / 86400000) + 1) / 7);
-}
-
-// ─── PLAN FACTORY ─────────────────────────────────────────────────
-function makePlan(mondayDate) {
-  return {
-    weekStart: isoDate(mondayDate),
-    days: DAYS_META.map((meta, i) => ({
-      idx:   i,
-      name:  meta.name,
-      emoji: meta.emoji,
-      hue:   meta.hue,
-      date:  isoDate(addDays(mondayDate, i)),
-      meals: [],
-    })),
-  };
-}
-
-function uid() {
-  return Math.random().toString(36).slice(2, 9);
-}
-
-// ─── PERSIST (admin) ──────────────────────────────────────────────
-function savePlan() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(plan));
-}
-
-function loadPlan() {
+// ── INIT ───────────────────────────────────────────────────────────────
+async function init() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    [db,userCap]=await Promise.all([window.claude?.use('db'),window.claude?.use('user')]);
   } catch {}
-  return null;
-}
-
-// ─── ROUTING ──────────────────────────────────────────────────────
-function init() {
-  const hash = location.hash.slice(1);
-  if (hash) {
-    const data = decode(hash);
-    if (data && data.voter) {
-      // Response from a child
-      responseData = data;
-      mode = 'response';
-      showResponseView();
-      return;
-    }
-    if (data && data.weekStart) {
-      // Vote mode (shared plan link)
-      plan = data;
-      mode = 'vote';
-      showVoteView();
-      return;
-    }
+  if (!db) {
+    document.getElementById('loading-screen').innerHTML=`
+      <div class="err-box"><h2>Öppna via delad länk</h2>
+      <p>Be föräldern skicka den delade Claude-länken.</p></div>`;
+    return;
   }
 
-  // Admin mode
-  mode = 'admin';
-  plan = loadPlan();
-  if (!plan) plan = makePlan(getMonday(new Date()));
-  showAdminView();
+  const me=await userCap?.me()??{};
+  myId=me.id??null; isOwner=me.isOwner??false;
+
+  if (myId&&!isOwner) {
+    try {
+      const snap=await db.collection('votes').doc(myId).get();
+      if (snap.exists) myName=snap.data().name||'';
+    } catch {}
+    const ni=document.getElementById('name-inp');
+    ni.value=myName;
+    ni.addEventListener('change',e=>{ myName=e.target.value.trim(); saveVoteName(); });
+    document.getElementById('name-row').hidden=false;
+  }
+
+  const chip=document.getElementById('role-chip');
+  chip.textContent=isOwner?'Förälder':'Barn';
+  chip.className='chip '+(isOwner?'chip-p':'chip-c');
+
+  if (isOwner) {
+    document.getElementById('week-nav').hidden=false;
+    document.getElementById('prev-w').addEventListener('click',()=>changeWeek(-7));
+    document.getElementById('next-w').addEventListener('click',()=>changeWeek(7));
+  }
+
+  // Library subscription (all roles can see, parent can manage)
+  libUnsub=db.collection('library').onSnapshot(snap=>{
+    library=snap.docs.map(d=>({id:d.id,...d.data()}))
+      .sort((a,b)=>a.name.localeCompare(b.name,'sv'));
+    render();
+  });
+
+  subscribeWeek();
+  document.getElementById('loading-screen').hidden=true;
+  document.getElementById('main-app').hidden=false;
 }
 
-// ─── ADMIN VIEW ───────────────────────────────────────────────────
-function showAdminView() {
-  document.getElementById('admin-view').style.display = '';
-  document.getElementById('vote-view').style.display  = 'none';
-  document.getElementById('response-view').style.display = 'none';
-  renderAdmin();
-}
+// ── SUBSCRIPTIONS ──────────────────────────────────────────────────────
+function subscribeWeek() {
+  if (planUnsub) planUnsub();
+  if (votesUnsub) votesUnsub();
+  updateWeekLabel();
 
-function renderAdmin() {
-  const monday = new Date(plan.weekStart + 'T12:00:00');
-  const sunday = addDays(monday, 6);
-  const wn     = weekNumber(monday);
-  document.getElementById('week-label').textContent =
-    `Vecka ${wn} · ${svDate(plan.weekStart)}–${svDate(isoDate(sunday))}`;
-
-  const container = document.getElementById('admin-days');
-  container.innerHTML = '';
-
-  plan.days.forEach((day, di) => {
-    const card = document.createElement('div');
-    card.className = 'day-card';
-
-    // Header
-    const header = document.createElement('div');
-    header.className = 'day-header';
-    header.style.background = day.hue;
-    header.innerHTML = `
-      <span class="day-emoji">${day.emoji}</span>
-      <div class="day-header-text">
-        <div class="day-name">${day.name}</div>
-        <div class="day-date">${svDate(day.date)}</div>
-      </div>
-    `;
-    card.appendChild(header);
-
-    // Body
-    const body = document.createElement('div');
-    body.className = 'day-body';
-
-    // Meal list
-    const list = document.createElement('ul');
-    list.className = 'meal-list';
-    if (day.meals.length === 0) {
-      list.innerHTML = '<li class="empty-meals">Inga förslag ännu…</li>';
-    } else {
-      day.meals.forEach((meal, mi) => {
-        const li = document.createElement('li');
-        li.className = 'meal-item';
-        li.innerHTML = `
-          <span class="meal-name">${escHtml(meal.name)}</span>
-          <span class="meal-by">${escHtml(meal.by || '')}</span>
-          <button class="del-btn" title="Ta bort" onclick="deleteMeal(${di},${mi})">✕</button>
-        `;
-        list.appendChild(li);
-      });
+  planUnsub=db.collection('plans').doc(weekStart).onSnapshot(snap=>{
+    if (snap.exists) { plan=snap.data(); }
+    else {
+      plan=makePlan(weekStart);
+      if (isOwner) db.collection('plans').doc(weekStart).set(plan).catch(()=>{});
     }
-    body.appendChild(list);
+    render();
+  });
 
-    // Add meal row
-    const addRow = document.createElement('div');
-    addRow.className = 'add-meal-row';
-    addRow.innerHTML = `
-      <input type="text" placeholder="Lägg till rätt…" id="meal-input-${di}" maxlength="60" />
-      <button class="btn btn-primary btn-sm" onclick="addMeal(${di})">+ Lägg till</button>
-      <button class="btn-suggest" onclick="fetchSuggestions(${di})" title="Hämta förslag från internet">🌐 Förslag</button>
-    `;
-    body.appendChild(addRow);
+  votesUnsub=db.collection('votes').onSnapshot(snap=>{
+    allVotes={}; snap.docs.forEach(d=>{ allVotes[d.id]=d.data(); }); render();
+  });
+}
 
-    // Suggestions panel placeholder
-    const sugPanel = document.createElement('div');
-    sugPanel.id = `sug-panel-${di}`;
-    body.appendChild(sugPanel);
+function updateWeekLabel() {
+  const mon=new Date(weekStart+'T12:00:00');
+  const lbl=`Vecka ${weekNum(mon)} · ${svDate(weekStart)}–${svDate(isoDate(addDays(mon,6)))}`;
+  document.getElementById('wnav-lbl').textContent=lbl;
+  document.getElementById('hdr-sub').textContent=lbl;
+}
 
-    // Enter key on input
-    addRow.querySelector('input').addEventListener('keydown', e => {
-      if (e.key === 'Enter') addMeal(di);
+function changeWeek(delta) {
+  const mon=new Date(weekStart+'T12:00:00'); mon.setDate(mon.getDate()+delta);
+  weekStart=isoDate(mon); openSugPanel=null; movingMeal=null; subscribeWeek();
+}
+
+// ── DERIVED ────────────────────────────────────────────────────────────
+function wk() { return `w_${weekStart}`; }
+
+function getAllMeals(dayIdx) {
+  const base=plan?.days?.[dayIdx]?.meals??[];
+  const sugs=[];
+  Object.entries(allVotes).forEach(([,v])=>{
+    const ds=(v[wk()]?.suggestions??{})[dayIdx]??[];
+    ds.forEach(s=>sugs.push({...s,by:v.name||'Barn'}));
+  });
+  return {base,sugs};
+}
+
+function voteCount(mealId) {
+  return Object.values(allVotes).filter(v=>!!(v[wk()]?.picks?.[mealId])).length;
+}
+function downCount(mealId) {
+  return Object.values(allVotes).filter(v=>!!(v[wk()]?.downs?.[mealId])).length;
+}
+function netScore(mealId) { return voteCount(mealId)-downCount(mealId); }
+function iVoted(mealId)    { return !!(allVotes[myId]?.[wk()]?.picks?.[mealId]); }
+function iDownvoted(mealId){ return !!(allVotes[myId]?.[wk()]?.downs?.[mealId]); }
+
+function voterNames(mealId) {
+  return Object.values(allVotes).filter(v=>!!(v[wk()]?.picks?.[mealId])).map(v=>v.name||'Barn');
+}
+function dvoterNames(mealId) {
+  return Object.values(allVotes).filter(v=>!!(v[wk()]?.downs?.[mealId])).map(v=>v.name||'Barn');
+}
+
+// ── RENDER ─────────────────────────────────────────────────────────────
+function render() { if (!plan) return; isOwner?renderParent():renderChild(); }
+
+function renderParent() {
+  const list=document.getElementById('days-list'); list.innerHTML='';
+  plan.days.forEach((day,di)=>{
+    const {base,sugs}=getAllMeals(di);
+    const allM=[...base,...sugs];
+    const totalV=allM.reduce((s,m)=>s+voteCount(m.id),0);
+
+    const card=mkCard(di,day,totalV>0?`${totalV} röst${totalV!==1?'er':''}`:``);
+    const body=card.querySelector('.dc-body');
+    const ul=document.createElement('ul'); ul.className='ml';
+
+    if (!allM.length) ul.innerHTML=`<li style="font-size:.8rem;color:var(--t2);padding:6px 0;font-style:italic">Inga rätter ännu</li>`;
+
+    base.forEach(meal=>{
+      const vc=voteCount(meal.id); const vn=voterNames(meal.id);
+      const isMoving=movingMeal?.di===di&&movingMeal?.id===meal.id;
+      const li=document.createElement('li'); li.className='mi';
+      li.innerHTML=`
+        <button class="mbtn${isMoving?' on':''}" data-di="${di}" data-id="${meal.id}" title="Flytta">⇄</button>
+        <span class="mi-name">${esc(meal.name)}</span>
+        ${vc>0?`<span class="mi-vc">${vc} ✓</span>`:''}
+        <button class="dbtn" data-di="${di}" data-id="${meal.id}" title="Ta bort">✕</button>`;
+      if (vn.length) {
+        const vrow=document.createElement('div'); vrow.className='mi-voters';
+        vn.forEach(n=>{ const c=document.createElement('span'); c.className='mi-voter'; c.textContent=n; vrow.appendChild(c); });
+        li.appendChild(vrow);
+      }
+      if (isMoving) {
+        const picker=document.createElement('div'); picker.className='move-picker';
+        DAYS.forEach((dname,tdi)=>{
+          const btn=document.createElement('button'); btn.className='move-day';
+          btn.textContent=dname.slice(0,3); btn.title=dname;
+          if (tdi===di) btn.disabled=true;
+          else btn.addEventListener('click',()=>moveMeal(di,meal.id,tdi));
+          picker.appendChild(btn);
+        });
+        li.appendChild(picker);
+      }
+      ul.appendChild(li);
     });
 
-    card.appendChild(body);
-    container.appendChild(card);
-  });
-}
-
-function addMeal(di) {
-  const input = document.getElementById(`meal-input-${di}`);
-  const name  = input.value.trim();
-  if (!name) return;
-  plan.days[di].meals.push({ id: uid(), name, by: 'Papa' });
-  savePlan();
-  input.value = '';
-  renderAdmin();
-  document.getElementById(`meal-input-${di}`).focus();
-}
-
-function deleteMeal(di, mi) {
-  plan.days[di].meals.splice(mi, 1);
-  savePlan();
-  renderAdmin();
-}
-
-// Week navigation
-document.getElementById('prev-week-btn').addEventListener('click', () => {
-  const mon = getMonday(new Date(plan.weekStart + 'T12:00:00'));
-  mon.setDate(mon.getDate() - 7);
-  plan = makePlan(mon);
-  const stored = loadPlan();
-  if (stored && stored.weekStart === isoDate(mon)) plan = stored;
-  savePlan();
-  renderAdmin();
-});
-
-document.getElementById('next-week-btn').addEventListener('click', () => {
-  const mon = getMonday(new Date(plan.weekStart + 'T12:00:00'));
-  mon.setDate(mon.getDate() + 7);
-  plan = makePlan(mon);
-  const stored = loadPlan();
-  if (stored && stored.weekStart === isoDate(mon)) plan = stored;
-  savePlan();
-  renderAdmin();
-});
-
-// Share
-document.getElementById('share-btn').addEventListener('click', () => {
-  const url = location.origin + location.pathname + '#' + encode(plan);
-  document.getElementById('share-url-text').textContent = url;
-  document.getElementById('share-modal').classList.remove('hidden');
-});
-
-document.getElementById('copy-share-btn').addEventListener('click', () => {
-  const url = document.getElementById('share-url-text').textContent;
-  copyToClipboard(url, 'Länk kopierad! 🎉');
-});
-
-document.getElementById('close-share-modal').addEventListener('click', () => {
-  document.getElementById('share-modal').classList.add('hidden');
-});
-
-// ─── VOTE VIEW ────────────────────────────────────────────────────
-function showVoteView() {
-  document.getElementById('admin-view').style.display  = 'none';
-  document.getElementById('vote-view').style.display   = '';
-  document.getElementById('response-view').style.display = 'none';
-
-  // Init picks and suggestions
-  plan.days.forEach((_, i) => {
-    myPicks[i]       = new Set();
-    mySuggestions[i] = [];
-  });
-
-  const monday = new Date(plan.weekStart + 'T12:00:00');
-  const sunday = addDays(monday, 6);
-  const wn     = weekNumber(monday);
-  document.getElementById('vote-week-label').textContent =
-    `Vecka ${wn} · ${svDate(plan.weekStart)}–${svDate(isoDate(sunday))}`;
-
-  renderVote();
-}
-
-function renderVote() {
-  const container = document.getElementById('vote-days');
-  container.innerHTML = '';
-
-  plan.days.forEach((day, di) => {
-    const card = document.createElement('div');
-    card.className = 'day-card';
-
-    const header = document.createElement('div');
-    header.className = 'day-header';
-    header.style.background = day.hue;
-    header.innerHTML = `
-      <span class="day-emoji">${day.emoji}</span>
-      <div class="day-header-text">
-        <div class="day-name">${day.name}</div>
-        <div class="day-date">${svDate(day.date)}</div>
-      </div>
-    `;
-    card.appendChild(header);
-
-    const body = document.createElement('div');
-    body.className = 'day-body';
-
-    const list = document.createElement('ul');
-    list.className = 'meal-list';
-
-    const allMeals = [
-      ...day.meals,
-      ...(mySuggestions[di] || []),
-    ];
-
-    if (allMeals.length === 0) {
-      list.innerHTML = '<li class="empty-meals">Inga förslag — lägg till ett eget!</li>';
-    } else {
-      allMeals.forEach(meal => {
-        const voted = myPicks[di].has(meal.id);
-        const li = document.createElement('li');
-        li.className = 'meal-item';
-        li.innerHTML = `
-          <button class="vote-btn ${voted ? 'voted' : ''}" onclick="togglePick(${di},'${meal.id}')" title="${voted ? 'Avrösta' : 'Rösta'}">
-            ${voted ? '✓' : '👍'}
-          </button>
-          <span class="meal-name">${escHtml(meal.name)}</span>
-          <span class="meal-by">${escHtml(meal.by === 'Papa' ? '(Papa)' : meal.by ? `(${meal.by})` : '')}</span>
-        `;
-        list.appendChild(li);
-      });
-    }
-    body.appendChild(list);
-
-    // Add own suggestion
-    const addRow = document.createElement('div');
-    addRow.className = 'add-meal-row';
-    addRow.innerHTML = `
-      <input type="text" placeholder="Eget förslag…" id="vote-input-${di}" maxlength="60" />
-      <button class="btn btn-ghost btn-sm" onclick="addVoteSuggestion(${di})">+ Förslag</button>
-    `;
-    addRow.querySelector('input').addEventListener('keydown', e => {
-      if (e.key === 'Enter') addVoteSuggestion(di);
+    sugs.forEach(sug=>{
+      const vc=voteCount(sug.id); const vn=voterNames(sug.id);
+      const li=document.createElement('li'); li.className='mi';
+      li.innerHTML=`<span style="font-size:.62rem;color:var(--t2);flex-shrink:0">↳</span>
+        <span class="mi-name">${esc(sug.name)}</span>
+        <span class="mi-by">${esc(sug.by)}</span>
+        ${vc>0?`<span class="mi-vc">${vc} ✓</span>`:''}`;
+      if (vn.length) {
+        const vrow=document.createElement('div'); vrow.className='mi-voters';
+        vn.forEach(n=>{ const c=document.createElement('span'); c.className='mi-voter'; c.textContent=n; vrow.appendChild(c); });
+        li.appendChild(vrow);
+      }
+      ul.appendChild(li);
     });
-    body.appendChild(addRow);
 
-    card.appendChild(body);
-    container.appendChild(card);
+    body.appendChild(ul);
+    body.appendChild(mkAddRow(di,true));
+    const sp=document.createElement('div'); sp.id=`sp-${di}`;
+    if (openSugPanel===di) sp.appendChild(buildSugPanel(di,true));
+    body.appendChild(sp);
+    list.appendChild(card);
+  });
+  list.querySelectorAll('.mbtn').forEach(btn=>{
+    btn.addEventListener('click',()=>toggleMovePicker(+btn.dataset.di,btn.dataset.id));
+  });
+  list.querySelectorAll('.dbtn').forEach(btn=>{
+    btn.addEventListener('click',()=>deleteMeal(+btn.dataset.di,btn.dataset.id));
   });
 }
 
-function togglePick(di, mealId) {
-  if (myPicks[di].has(mealId)) {
-    myPicks[di].delete(mealId);
+function renderChild() {
+  const list=document.getElementById('days-list'); list.innerHTML='';
+  plan.days.forEach((day,di)=>{
+    const {base,sugs}=getAllMeals(di);
+    const allM=[...base,...sugs].sort((a,b)=>{
+      const sa=netScore(a.id), sb=netScore(b.id);
+      return sb!==sa ? sb-sa : 0;  // higher net first; equal = original order (stable sort)
+    });
+
+    const card=mkCard(di,day,''); const body=card.querySelector('.dc-body');
+    const ul=document.createElement('ul'); ul.className='ml';
+
+    if (!allM.length) ul.innerHTML=`<li style="font-size:.8rem;color:var(--t2);padding:6px 0;font-style:italic">Inga förslag ännu</li>`;
+    else allM.forEach(meal=>{
+      const voted=iVoted(meal.id), downed=iDownvoted(meal.id);
+      const vc=voteCount(meal.id), dc=downCount(meal.id);
+      const li=document.createElement('li'); li.className='mi';
+      li.style.opacity=(downed&&!voted)?'.55':'1';
+      li.innerHTML=`
+        <button class="vbtn${voted?' on':''}" data-di="${di}" data-id="${meal.id}" title="Rösta upp">✓</button>
+        <span class="mi-name">${esc(meal.name)}</span>
+        ${meal.by&&meal.by!=='Papa'?`<span class="mi-by">${esc(meal.by)}</span>`:''}
+        ${vc>0?`<span class="mi-vc">${vc}</span>`:''}
+        ${dc>0?`<span class="mi-vd">–${dc}</span>`:''}
+        <button class="vbtn-d${downed?' on':''}" data-di="${di}" data-id="${meal.id}" title="Rösta ner">–</button>
+      `;
+      ul.appendChild(li);
+    });
+
+    body.appendChild(ul);
+    body.appendChild(mkAddRow(di,false));
+    const sp=document.createElement('div'); sp.id=`sp-${di}`;
+    if (openSugPanel===di) sp.appendChild(buildSugPanel(di,false));
+    body.appendChild(sp);
+    list.appendChild(card);
+  });
+
+  list.querySelectorAll('.vbtn').forEach(btn=>{
+    btn.addEventListener('click',()=>toggleVote(+btn.dataset.di,btn.dataset.id));
+  });
+  list.querySelectorAll('.vbtn-d').forEach(btn=>{
+    btn.addEventListener('click',()=>toggleDown(+btn.dataset.di,btn.dataset.id));
+  });
+}
+
+function mkCard(di,day,vcLabel) {
+  const card=document.createElement('div'); card.className=`dc d${di}`;
+  card.innerHTML=`<div class="dc-strip"></div>
+    <div class="dc-head">
+      <span class="dc-name">${day.name}</span>
+      <span class="dc-date">${svDate(day.date)}</span>
+      ${vcLabel?`<span class="dc-vc">${vcLabel}</span>`:''}
+    </div><div class="dc-body"></div>`;
+  return card;
+}
+
+function mkAddRow(di,isParent) {
+  const ar=document.createElement('div'); ar.className='ar';
+  if (isParent) {
+    ar.innerHTML=`
+      <div class="ac-wrap">
+        <input type="text" class="ar-inp" id="pai-${di}" placeholder="Lägg till rätt…" maxlength="60" autocomplete="off" />
+        <div class="ac-drop" id="ac-${di}" hidden></div>
+      </div>
+      <button class="btn btn-a btn-sm" data-di="${di}" data-role="add">+</button>
+      <button class="spbtn${openSugPanel===di?' open':''}" data-di="${di}" data-role="sug">Förslag</button>
+    `;
+    const inp=ar.querySelector(`#pai-${di}`);
+    const drop=ar.querySelector(`#ac-${di}`);
+
+    function showDrop() {
+      const q=inp.value.trim().toLowerCase(); if (!q) { drop.hidden=true; return; }
+      const taken=new Set((plan?.days?.[di]?.meals??[]).map(m=>m.name.toLowerCase()));
+      const libM=library.filter(m=>!taken.has(m.name.toLowerCase())&&m.name.toLowerCase().includes(q));
+      const mealM=MEALS.filter(m=>!taken.has(m.toLowerCase())&&m.toLowerCase().includes(q)&&!libM.some(l=>l.name.toLowerCase()===m.toLowerCase()));
+      const all=[...libM.map(m=>({name:m.name,lib:true})),...mealM.map(m=>({name:m,lib:false}))].slice(0,8);
+      if (!all.length) { drop.hidden=true; return; }
+      drop.innerHTML='';
+      all.forEach(item=>{
+        const row=document.createElement('div');
+        row.className='ac-item'+(item.lib?' lib':'');
+        row.textContent=item.name;
+        row.addEventListener('mousedown',e=>{ e.preventDefault(); addMeal(di,item.name); inp.value=''; drop.hidden=true; });
+        drop.appendChild(row);
+      });
+      drop.hidden=false;
+    }
+
+    inp.addEventListener('input',showDrop);
+    inp.addEventListener('blur',()=>setTimeout(()=>{ drop.hidden=true; },150));
+    inp.addEventListener('keydown',e=>{
+      if (e.key==='Escape') { drop.hidden=true; return; }
+      if (!drop.hidden&&(e.key==='ArrowDown'||e.key==='ArrowUp')) {
+        e.preventDefault();
+        const items=[...drop.querySelectorAll('.ac-item')];
+        const cur=drop.querySelector('.ac-item.focused');
+        let idx=items.indexOf(cur);
+        if (e.key==='ArrowDown') idx=Math.min(idx+1,items.length-1);
+        else idx=Math.max(idx-1,0);
+        if (cur) cur.classList.remove('focused');
+        items[idx]?.classList.add('focused');
+        inp.value=items[idx]?.textContent??inp.value;
+        return;
+      }
+      if (e.key==='Enter') { addMeal(di); drop.hidden=true; }
+    });
+    ar.querySelector('[data-role="add"]').addEventListener('click',e=>{ addMeal(+e.target.dataset.di); drop.hidden=true; });
+    ar.querySelector('[data-role="sug"]').addEventListener('click',e=>toggleSugPanel(+e.target.dataset.di));
   } else {
-    myPicks[di].add(mealId);
-  }
-  renderVote();
-}
-
-function addVoteSuggestion(di) {
-  const input = document.getElementById(`vote-input-${di}`);
-  const name  = input.value.trim();
-  if (!name) return;
-  const voterName = document.getElementById('voter-name-input').value.trim() || 'Barn';
-  const meal = { id: uid(), name, by: voterName };
-  mySuggestions[di].push(meal);
-  myPicks[di].add(meal.id);
-  input.value = '';
-  renderVote();
-}
-
-// Send votes
-document.getElementById('send-vote-btn').addEventListener('click', () => {
-  const voterName = document.getElementById('voter-name-input').value.trim() || 'Barn';
-
-  // Build picks array (all meal IDs selected)
-  const allPicks = [];
-  Object.keys(myPicks).forEach(di => {
-    myPicks[di].forEach(id => allPicks.push(id));
-  });
-
-  // Build combined plan with suggestions included
-  const planWithSuggestions = {
-    ...plan,
-    days: plan.days.map((day, di) => ({
-      ...day,
-      meals: [
-        ...day.meals,
-        ...(mySuggestions[di] || []),
-      ],
-    })),
-    voter: voterName,
-    picks: allPicks,
-  };
-
-  const url = location.origin + location.pathname + '#' + encode(planWithSuggestions);
-  document.getElementById('send-url-text').textContent = url;
-  document.getElementById('send-modal').classList.remove('hidden');
-});
-
-document.getElementById('copy-send-btn').addEventListener('click', () => {
-  const url = document.getElementById('send-url-text').textContent;
-  copyToClipboard(url, `Tack ${document.getElementById('voter-name-input').value.trim() || ''}! Länk kopierad 💌`);
-});
-
-document.getElementById('close-send-modal').addEventListener('click', () => {
-  document.getElementById('send-modal').classList.add('hidden');
-});
-
-// ─── RESPONSE VIEW ────────────────────────────────────────────────
-function showResponseView() {
-  document.getElementById('admin-view').style.display   = 'none';
-  document.getElementById('vote-view').style.display    = 'none';
-  document.getElementById('response-view').style.display = '';
-
-  const data   = responseData;
-  const picksSet = new Set(data.picks || []);
-  const voter  = data.voter || 'Barn';
-
-  const monday = new Date(data.weekStart + 'T12:00:00');
-  const sunday = addDays(monday, 6);
-  const wn     = weekNumber(monday);
-  document.getElementById('resp-week-label').textContent =
-    `Vecka ${wn} · ${svDate(data.weekStart)}–${svDate(isoDate(sunday))}`;
-  document.getElementById('resp-voter-name').textContent = `${voter}s matsval`;
-
-  // Summary of picks
-  const summary = document.getElementById('resp-summary');
-  summary.innerHTML = '';
-  const pickedMeals = [];
-  (data.days || []).forEach(day => {
-    (day.meals || []).forEach(meal => {
-      if (picksSet.has(meal.id)) pickedMeals.push(meal.name);
-    });
-  });
-  if (pickedMeals.length === 0) {
-    summary.innerHTML = '<span style="color:#6b7280;font-size:0.85rem">Inga röster registrerades.</span>';
-  } else {
-    pickedMeals.forEach(name => {
-      const pill = document.createElement('span');
-      pill.className = 'pick-pill';
-      pill.textContent = name;
-      summary.appendChild(pill);
-    });
-  }
-
-  // Day cards
-  const container = document.getElementById('resp-days');
-  container.innerHTML = '';
-
-  (data.days || []).forEach(day => {
-    const card = document.createElement('div');
-    card.className = 'day-card';
-
-    const header = document.createElement('div');
-    header.className = 'day-header';
-    header.style.background = day.hue || '#f5f5f5';
-    header.innerHTML = `
-      <span class="day-emoji">${day.emoji || '🍽️'}</span>
-      <div class="day-header-text">
-        <div class="day-name">${day.name}</div>
-        <div class="day-date">${svDate(day.date)}</div>
+    ar.innerHTML=`
+      <div class="ac-wrap">
+        <input type="text" class="ar-inp" id="ci-${di}" placeholder="Eget förslag…" maxlength="60" autocomplete="off" />
+        <div class="ac-drop" id="acc-${di}" hidden></div>
       </div>
+      <button class="btn btn-g btn-sm" data-di="${di}" data-role="add">+ Förslag</button>
+      <button class="spbtn${openSugPanel===di?' open':''}" data-di="${di}" data-role="sug">Lista</button>
     `;
-    card.appendChild(header);
+    const inp=ar.querySelector(`#ci-${di}`);
+    const drop=ar.querySelector(`#acc-${di}`);
 
-    const body = document.createElement('div');
-    body.className = 'day-body';
-    const list = document.createElement('ul');
-    list.className = 'meal-list';
-
-    if ((day.meals || []).length === 0) {
-      list.innerHTML = '<li class="empty-meals">Inga förslag</li>';
-    } else {
-      day.meals.forEach(meal => {
-        const picked = picksSet.has(meal.id);
-        const li = document.createElement('li');
-        li.className = 'meal-item' + (picked ? ' picked' : '');
-        li.innerHTML = `
-          <span style="font-size:1.1rem">${picked ? '✅' : '⬜'}</span>
-          <span class="meal-name">${escHtml(meal.name)}</span>
-          <span class="meal-by">${escHtml(meal.by && meal.by !== 'Papa' ? `(${meal.by})` : '')}</span>
-        `;
-        list.appendChild(li);
+    function showDropC() {
+      const q=inp.value.trim().toLowerCase(); if (!q) { drop.hidden=true; return; }
+      const taken=new Set([
+        ...(plan?.days?.[di]?.meals??[]).map(m=>m.name.toLowerCase()),
+        ...Object.values(allVotes).flatMap(v=>(v[wk()]?.suggestions??{})[di]??[]).map(s=>s.name.toLowerCase())
+      ]);
+      const libM=library.filter(m=>!taken.has(m.name.toLowerCase())&&m.name.toLowerCase().includes(q));
+      const mealM=MEALS.filter(m=>!taken.has(m.toLowerCase())&&m.toLowerCase().includes(q)&&!libM.some(l=>l.name.toLowerCase()===m.toLowerCase()));
+      const all=[...libM.map(m=>({name:m.name,lib:true})),...mealM.map(m=>({name:m,lib:false}))].slice(0,8);
+      if (!all.length) { drop.hidden=true; return; }
+      drop.innerHTML='';
+      all.forEach(item=>{
+        const row=document.createElement('div');
+        row.className='ac-item'+(item.lib?' lib':'');
+        row.textContent=item.name;
+        row.addEventListener('mousedown',e=>{ e.preventDefault(); addSuggestion(di,item.name); inp.value=''; drop.hidden=true; });
+        drop.appendChild(row);
       });
+      drop.hidden=false;
     }
-    body.appendChild(list);
-    card.appendChild(body);
-    container.appendChild(card);
-  });
+
+    inp.addEventListener('input',showDropC);
+    inp.addEventListener('blur',()=>setTimeout(()=>{ drop.hidden=true; },150));
+    inp.addEventListener('keydown',e=>{
+      if (e.key==='Escape') { drop.hidden=true; return; }
+      if (!drop.hidden&&(e.key==='ArrowDown'||e.key==='ArrowUp')) {
+        e.preventDefault();
+        const items=[...drop.querySelectorAll('.ac-item')];
+        const cur=drop.querySelector('.ac-item.focused');
+        let idx=items.indexOf(cur);
+        if (e.key==='ArrowDown') idx=Math.min(idx+1,items.length-1);
+        else idx=Math.max(idx-1,0);
+        if (cur) cur.classList.remove('focused');
+        items[idx]?.classList.add('focused');
+        inp.value=items[idx]?.textContent??inp.value;
+        return;
+      }
+      if (e.key==='Enter') { addSuggestion(di); drop.hidden=true; }
+    });
+    ar.querySelector('[data-role="add"]').addEventListener('click',e=>{ addSuggestion(+e.target.dataset.di); drop.hidden=true; });
+    ar.querySelector('[data-role="sug"]').addEventListener('click',e=>toggleSugPanel(+e.target.dataset.di));
+  }
+  return ar;
 }
 
-document.getElementById('back-to-admin-btn').addEventListener('click', () => {
-  location.hash = '';
-  location.reload();
-});
+function toggleSugPanel(di) {
+  openSugPanel=openSugPanel===di?null:di; render();
+}
 
-// ─── ONLINE SUGGESTIONS (TheMealDB) ──────────────────────────────
-async function fetchSuggestions(di) {
-  const panelId = `sug-panel-${di}`;
-  const panel   = document.getElementById(panelId);
-  panel.innerHTML = `
-    <div class="online-panel">
-      <div class="online-panel-header">🌐 Hämtar förslag…</div>
-      <div class="loading-spinner">⏳ Laddar…</div>
-    </div>
-  `;
+// ── SUGGESTION PANEL ───────────────────────────────────────────────────
+function buildSugPanel(di,isParent) {
+  const {base,sugs}=getAllMeals(di);
+  const taken=new Set([...base,...sugs].map(m=>m.name.toLowerCase()));
+  const avail=MEALS.filter(m=>!taken.has(m.toLowerCase()));
+  const picks=avail.sort(()=>Math.random()-.5).slice(0,8);
 
+  const panel=document.createElement('div'); panel.className='sppanel';
+
+  // ── Section 1: Quick picks ──
+  panel.innerHTML=`<div class="sppanel-lbl">Snabbförslag</div>`;
+  const pills=document.createElement('div'); pills.className='sppills';
+  picks.forEach(name=>{
+    const btn=document.createElement('button'); btn.className='sppill';
+    btn.textContent=name;
+    btn.addEventListener('click',()=>{ addByName(di,isParent,name); openSugPanel=null; });
+    pills.appendChild(btn);
+  });
+  panel.appendChild(pills);
+
+  // "Fler" button — re-renders panel in-place
+  const fler=document.createElement('button'); fler.className='spp-fler'; fler.textContent='Fler förslag →';
+  fler.addEventListener('click',()=>{
+    const sp=document.getElementById(`sp-${di}`);
+    if(sp){ sp.innerHTML=''; sp.appendChild(buildSugPanel(di,isParent)); }
+  });
+  panel.appendChild(fler);
+
+  // ── Section 2: Library ──
+  const libSec=document.createElement('div'); libSec.className='spp-sec';
+  const libLbl=document.createElement('div'); libLbl.className='sppanel-lbl';
+  libLbl.textContent='Bibliotek' + (isOwner?' — klicka för att lägga till':'');
+  libSec.appendChild(libLbl);
+
+  const libAvail=library.filter(m=>!taken.has(m.name.toLowerCase()));
+  if (!libAvail.length) {
+    const emp=document.createElement('div');
+    emp.style.cssText='font-size:.78rem;color:var(--t2);padding:4px 0;font-style:italic';
+    emp.textContent='Biblioteket är tomt — importera rätter nedan';
+    libSec.appendChild(emp);
+  } else {
+    const libList=document.createElement('div'); libList.className='lib-list';
+    libAvail.forEach(item=>{
+      const row=document.createElement('div'); row.className='lib-item';
+      row.innerHTML=`<span class="lib-item-name">${esc(item.name)}</span>`;
+      const addBtn=document.createElement('button'); addBtn.className='lib-add'; addBtn.textContent='Lägg till';
+      addBtn.addEventListener('click',()=>{ addByName(di,isParent,item.name); openSugPanel=null; });
+      row.appendChild(addBtn);
+      if (isOwner) {
+        const del=document.createElement('button'); del.className='lib-del'; del.textContent='✕';
+        del.title='Ta bort från biblioteket';
+        del.addEventListener('click',()=>removeFromLibrary(item.id));
+        row.appendChild(del);
+      }
+      libList.appendChild(row);
+    });
+    libSec.appendChild(libList);
+  }
+  panel.appendChild(libSec);
+
+  // ── Section 3: Import (parent only) ──
+  if (isOwner) {
+    const impSec=document.createElement('div'); impSec.className='spp-sec';
+    impSec.innerHTML=`
+      <div class="sppanel-lbl">Importera till biblioteket</div>
+      <div style="font-size:.72rem;color:var(--t2);margin-bottom:4px">Klistra in en länk (t.ex. köket.se) eller skriv receptnamn, ett per rad</div>
+      <div class="spp-row">
+        <input type="text" class="spp-inp" id="url-inp-${di}" placeholder="https://www.koket.se/recept/…" />
+        <button class="btn btn-am btn-sm" id="url-add-${di}">Lägg till</button>
+      </div>
+      <textarea class="spp-inp spp-ta" id="paste-inp-${di}"
+                placeholder="Pasta Bolognese&#10;Köttbullar&#10;Tacos" style="margin-top:6px"></textarea>
+      <button class="btn btn-am btn-sm" id="paste-add-${di}" style="margin-top:6px">
+        Spara i biblioteket
+      </button>
+    `;
+    impSec.querySelector(`#url-add-${di}`).addEventListener('click',()=>addFromUrl(di));
+    impSec.querySelector(`#url-inp-${di}`).addEventListener('keydown',e=>{ if(e.key==='Enter') addFromUrl(di); });
+    impSec.querySelector(`#paste-add-${di}`).addEventListener('click',()=>addFromPaste(di));
+    panel.appendChild(impSec);
+  }
+
+  return panel;
+}
+
+// ── ACTIONS ────────────────────────────────────────────────────────────
+async function addByName(di,isParent,name) {
+  if (isParent) await addMeal(di,name); else await addSuggestion(di,name);
+}
+
+async function addMeal(di,nameOverride) {
+  const name=nameOverride||(document.getElementById(`pai-${di}`)?.value.trim());
+  if (!name) return;
+  if (!nameOverride) { const el=document.getElementById(`pai-${di}`); if(el) el.value=''; }
+  const newMeal={id:uid(),name,by:'Papa'};
+  const newDays=plan.days.map((d,i)=>i===di?{...d,meals:[...d.meals,newMeal]}:d);
+  try { await db.collection('plans').doc(weekStart).update({days:newDays}); }
+  catch { toast('Kunde inte spara'); }
+}
+
+function toggleMovePicker(di,id) {
+  movingMeal=(movingMeal?.di===di&&movingMeal?.id===id)?null:{di,id};
+  render();
+}
+
+async function moveMeal(fromDi,mealId,toDi) {
+  const meal=plan.days[fromDi].meals.find(m=>m.id===mealId);
+  if (!meal) return;
+  const newDays=plan.days.map((d,i)=>{
+    if (i===fromDi) return{...d,meals:d.meals.filter(m=>m.id!==mealId)};
+    if (i===toDi)   return{...d,meals:[...d.meals,meal]};
+    return d;
+  });
+  movingMeal=null;
+  try { await db.collection('plans').doc(weekStart).update({days:newDays}); }
+  catch { toast('Fel — försök igen'); }
+}
+
+async function deleteMeal(di,mealId) {
+  const newDays=plan.days.map((d,i)=>i===di?{...d,meals:d.meals.filter(m=>m.id!==mealId)}:d);
+  try { await db.collection('plans').doc(weekStart).update({days:newDays}); }
+  catch { toast('Fel — försök igen'); }
+}
+
+async function addSuggestion(di,nameOverride) {
+  if (!myId) { toast('Inte inloggad'); return; }
+  const name=nameOverride||(document.getElementById(`ci-${di}`)?.value.trim());
+  if (!name) return;
+  if (!nameOverride) { const el=document.getElementById(`ci-${di}`); if(el) el.value=''; }
+  const sug={id:uid(),name};
+  const ex=allVotes[myId]??{}, exw=ex[wk()]??{};
+  const exs=exw.suggestions??{}, ds=exs[di]??[];
+  const picks={...(exw.picks??{}),[sug.id]:true};
   try {
-    // Fetch 4 random meals in parallel
-    const fetches = [1, 2, 3, 4].map(() =>
-      fetch(MEALDB_URL).then(r => r.json())
-    );
-    const results = await Promise.all(fetches);
-    const names   = [...new Set(results.map(r => r.meals?.[0]?.strMeal).filter(Boolean))];
-
-    panel.innerHTML = `
-      <div class="online-panel">
-        <div class="online-panel-header">🌐 Förslag från nätet — klicka för att lägga till:</div>
-        <div class="online-suggestions" id="sug-pills-${di}"></div>
-      </div>
-    `;
-
-    const pillsContainer = document.getElementById(`sug-pills-${di}`);
-    names.forEach(name => {
-      const btn = document.createElement('button');
-      btn.className = 'online-pill';
-      btn.textContent = name;
-      btn.addEventListener('click', () => {
-        const mealInput = document.getElementById(`meal-input-${di}`);
-        mealInput.value = name;
-        panel.innerHTML = '';
-        addMeal(di);
-      });
-      pillsContainer.appendChild(btn);
+    await db.collection('votes').doc(myId).set({
+      ...ex, name:myName||(ex.name||'Barn'),
+      [wk()]:{...exw,picks,suggestions:{...exs,[di]:[...ds,sug]}}
     });
-
-    // Refresh button
-    const refresh = document.createElement('button');
-    refresh.className = 'online-pill';
-    refresh.textContent = '🔄 Fler förslag';
-    refresh.style.background = '#fef9c3';
-    refresh.addEventListener('click', () => fetchSuggestions(di));
-    pillsContainer.appendChild(refresh);
-
-  } catch {
-    panel.innerHTML = `
-      <div class="online-panel">
-        <div class="online-panel-header">⚠️ Kunde inte hämta förslag just nu</div>
-      </div>
-    `;
-  }
+  } catch { toast('Fel'); }
 }
 
-// ─── UTILITIES ────────────────────────────────────────────────────
-function escHtml(str) {
-  if (!str) return '';
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+async function toggleVote(di,mealId) {
+  if (!myId) { toast('Inte inloggad'); return; }
+  const ex=allVotes[myId]??{}, exw=ex[wk()]??{};
+  const picks={...(exw.picks??{})};
+  if (picks[mealId]) delete picks[mealId]; else picks[mealId]=true;
+  try {
+    await db.collection('votes').doc(myId).set({
+      ...ex, name:myName||(ex.name||'Barn'), [wk()]:{...exw,picks}
+    });
+  } catch { toast('Fel'); }
 }
 
-function copyToClipboard(text, successMsg) {
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(text).then(() => showToast(successMsg));
-  } else {
-    // Fallback for older browsers
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.opacity  = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-    showToast(successMsg);
-  }
+async function toggleDown(di,mealId) {
+  if (!myId) { toast('Inte inloggad'); return; }
+  const ex=allVotes[myId]??{}, exw=ex[wk()]??{};
+  const downs={...(exw.downs??{})};
+  if (downs[mealId]) delete downs[mealId]; else downs[mealId]=true;
+  // Can't both up and down vote
+  const picks={...(exw.picks??{})};
+  if (downs[mealId]&&picks[mealId]) delete picks[mealId];
+  try {
+    await db.collection('votes').doc(myId).set({
+      ...ex, name:myName||(ex.name||'Barn'), [wk()]:{...exw,picks,downs}
+    });
+  } catch { toast('Fel'); }
 }
 
-let toastTimer;
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+async function addToLibrary(name) {
+  const id=uid();
+  try {
+    await db.collection('library').doc(id).set({id,name,addedAt:Date.now()});
+    toast(`"${name}" sparad i biblioteket`);
+  } catch { toast('Kunde inte spara i biblioteket'); }
 }
 
-// Close modals on overlay click
-document.querySelectorAll('.modal-overlay').forEach(overlay => {
-  overlay.addEventListener('click', e => {
-    if (e.target === overlay) overlay.classList.add('hidden');
-  });
-});
+async function removeFromLibrary(id) {
+  try { await db.collection('library').doc(id).delete(); }
+  catch { toast('Fel'); }
+}
 
-// ─── BOOT ─────────────────────────────────────────────────────────
+async function addFromUrl(di) {
+  const inp=document.getElementById(`url-inp-${di}`);
+  const url=inp.value.trim(); if (!url) return;
+  const name=extractNameFromUrl(url);
+  if (!name) { toast('Kunde inte tolka URL:en'); return; }
+  inp.value='';
+  await addToLibrary(name);
+  // Also add to this day
+  await addMeal(di,name);
+  openSugPanel=null;
+}
+
+async function addFromPaste(di) {
+  const ta=document.getElementById(`paste-inp-${di}`);
+  const lines=ta.value.split('\n').map(l=>l.trim()).filter(Boolean);
+  if (!lines.length) return;
+  ta.value='';
+  for (const name of lines) await addToLibrary(name);
+  toast(`${lines.length} rätt${lines.length!==1?'er':''} sparade i biblioteket`);
+  openSugPanel=null;
+}
+
+async function saveVoteName() {
+  if (!myId) return;
+  const ex=allVotes[myId]??{};
+  try { await db.collection('votes').doc(myId).set({...ex,name:myName}); } catch {}
+}
+
+// ── BOOT ───────────────────────────────────────────────────────────────
 init();
 </script>
-</body>
-</html>
