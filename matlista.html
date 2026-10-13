@@ -468,42 +468,47 @@ function dvoterNames(mealId) {
 }
 
 // ── RATINGS ────────────────────────────────────────────────────────────
+// Per-user docs (like votes): allRatings = { userId: { ratings: { slug: score } } }
 function mealSlug(name) {
-  return name.trim().toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9åäö_]/g,'').slice(0,100);
+  return name.trim().toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'').slice(0,80)||'meal';
 }
 function avgRating(name) {
-  const doc=allRatings[mealSlug(name)]; if(!doc?.ratings) return 0;
-  const vals=Object.values(doc.ratings).filter(v=>v>0);
+  const slug=mealSlug(name);
+  const vals=Object.values(allRatings).map(u=>u?.ratings?.[slug]??0).filter(v=>v>0);
   return vals.length?vals.reduce((s,v)=>s+v,0)/vals.length:0;
 }
 function myRating(name) {
   if(!myId) return 0;
-  return allRatings[mealSlug(name)]?.ratings?.[myId]??0;
+  return allRatings[myId]?.ratings?.[mealSlug(name)]??0;
 }
 function ratingCount(name) {
-  const doc=allRatings[mealSlug(name)]; if(!doc?.ratings) return 0;
-  return Object.values(doc.ratings).filter(v=>v>0).length;
+  const slug=mealSlug(name);
+  return Object.values(allRatings).filter(u=>(u?.ratings?.[slug]??0)>0).length;
 }
 async function rateRecipe(name,score) {
   if(!myId){toast('Inte inloggad');return;}
   const slug=mealSlug(name);
-  const ex=allRatings[slug]??{name,ratings:{}};
-  const cur=ex.ratings?.[myId]??0;
-  // Clicking same star again removes the rating
-  const newScore=cur===score?0:score;
-  const newRatings={...ex.ratings,[myId]:newScore};
+  const ex=allRatings[myId]??{};
+  const cur=(ex.ratings??{})[slug]??0;
+  const newScore=cur===score?0:score;  // same star again = remove rating
+  const newRatings={...(ex.ratings??{}),[slug]:newScore};
   try {
-    await db.collection('ratings').doc(slug).set({name,ratings:newRatings});
-    // Auto-save to library if avg >= 3.5 with >= 2 non-zero ratings
-    const vals=Object.values(newRatings).filter(v=>v>0);
-    if(vals.length>=2) {
-      const avg=vals.reduce((s,v)=>s+v,0)/vals.length;
+    await db.collection('ratings').doc(myId).set({...ex,ratings:newRatings});
+    // Auto-save to library if avg >= 3.5 with >= 2 raters (computed from current state + this write)
+    const otherVals=Object.entries(allRatings)
+      .filter(([uid])=>uid!==myId)
+      .map(([,u])=>u?.ratings?.[slug]??0)
+      .filter(v=>v>0);
+    const myVals=newScore>0?[newScore]:[];
+    const allVals=[...otherVals,...myVals];
+    if(allVals.length>=2) {
+      const avg=allVals.reduce((s,v)=>s+v,0)/allVals.length;
       if(avg>=3.5&&!library.some(l=>l.name.toLowerCase()===name.toLowerCase())) {
         await addToLibrary(name);
         toast(`"${name}" sparades i biblioteket! ⭐`);
       }
     }
-  } catch { toast('Kunde inte betygsätta'); }
+  } catch(e) { toast('Kunde inte betygsätta'); }
 }
 function mkStarsRow(meal) {
   const row=document.createElement('div'); row.className='mi-stars';
