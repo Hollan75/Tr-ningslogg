@@ -67,6 +67,7 @@ button{cursor:pointer;font-family:inherit;transition:.12s all}
 }
 .wnav-btn:hover{background:var(--bd)}
 
+
 .cnt{max-width:680px;margin:0 auto;padding:14px 16px}
 
 .name-row{
@@ -210,6 +211,11 @@ button{cursor:pointer;font-family:inherit;transition:.12s all}
 .ac-item:hover,.ac-item.focused{background:var(--s2);color:var(--ac)}
 .ac-item.lib{color:var(--am)}
 .ac-item.lib:hover,.ac-item.lib.focused{background:var(--am-d);color:var(--am)}
+.meal-sec-lbl{
+  font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.7px;
+  color:var(--t2);padding:7px 0 3px;border-top:1px solid var(--bd);margin-top:2px;
+}
+.meal-sec-lbl:first-child{border-top:none;padding-top:2px;margin-top:0}
 
 .mbtn{width:26px;height:26px;border:none;background:none;color:var(--t2);font-size:.8rem;border-radius:5px;flex-shrink:0}
 .mbtn:hover{color:var(--ac)}
@@ -221,6 +227,12 @@ button{cursor:pointer;font-family:inherit;transition:.12s all}
 }
 .move-day:not(:disabled):hover{border-color:var(--ac);color:var(--ac);background:var(--ac-d)}
 .move-day:disabled{opacity:.35;cursor:default}
+
+/* star ratings */
+.mi-stars{flex:0 0 100%;display:flex;align-items:center;gap:1px;padding:3px 0 2px 34px}
+.star-btn{background:none;border:none;font-size:.88rem;color:var(--bd);padding:2px 1px;line-height:1;cursor:pointer;transition:.08s color}
+.star-btn:hover,.star-btn.on{color:var(--am)}
+.mi-avg{font-size:.64rem;color:var(--t2);margin-left:5px}
 @media (max-width:480px){.cnt{padding:12px 12px}}
 </style>
 
@@ -282,11 +294,11 @@ function isoDate(d) {
   return `${y}-${m}-${dd}`;
 }
 function getWednesday(d) {
-  const r=new Date(d),day=r.getDay();
-  // day>=3 (Wed-Sat): back to Wed; day<3 (Sun-Tue): back to previous Wed
-  const diff=day>=3?-(day-3):-(day+4);
-  r.setDate(r.getDate()+diff);
-  r.setHours(12,0,0,0); return r;
+  // Wed(3)=0, Thu(4)=-1, Fri(5)=-2, Sat(6)=-3, Sun(0)=-4
+  // Mon(1)=+2, Tue(2)=+1  ← Mon/Tue jump forward to next Wed (plan ahead)
+  const r=new Date(d);
+  const diff={0:-4,1:2,2:1,3:0,4:-1,5:-2,6:-3}[r.getDay()];
+  r.setDate(r.getDate()+diff); r.setHours(12,0,0,0); return r;
 }
 function addDays(d,n) { const r=new Date(d); r.setDate(r.getDate()+n); return r }
 function weekNum(d) {
@@ -325,7 +337,10 @@ let allVotes={};   // { userId: { name, w_YYYY-MM-DD: { picks, downs, suggestion
 let library=[];    // [{ id, name }] from db 'library' collection
 let planUnsub=null, votesUnsub=null, libUnsub=null;
 let openSugPanel=null; // dayIdx or null
+let openSugType='middag'; // 'lunch'|'middag' for Sat/Sun panels
 let movingMeal=null;  // {di, id} or null
+let allRatings={};  // { mealSlug: { name, ratings: { userId: score } } }
+let ratingsUnsub=null;
 
 // ── TOAST ──────────────────────────────────────────────────────────────
 let toastT;
@@ -378,6 +393,13 @@ async function init() {
     render();
   });
 
+  // Ratings subscription (all roles)
+  ratingsUnsub=db.collection('ratings').onSnapshot(snap=>{
+    allRatings={};
+    snap.docs.forEach(d=>{ allRatings[d.id]=d.data(); });
+    render();
+  });
+
   subscribeWeek();
   document.getElementById('loading-screen').hidden=true;
   document.getElementById('main-app').hidden=false;
@@ -412,7 +434,7 @@ function updateWeekLabel() {
 
 function changeWeek(delta) {
   const mon=new Date(weekStart+'T12:00:00'); mon.setDate(mon.getDate()+delta);
-  weekStart=isoDate(mon); openSugPanel=null; movingMeal=null; subscribeWeek();
+  weekStart=isoDate(mon); openSugPanel=null; openSugType='middag'; movingMeal=null; subscribeWeek();
 }
 
 // ── DERIVED ────────────────────────────────────────────────────────────
@@ -445,23 +467,81 @@ function dvoterNames(mealId) {
   return Object.values(allVotes).filter(v=>!!(v[wk()]?.downs?.[mealId])).map(v=>v.name||'Barn');
 }
 
+// ── RATINGS ────────────────────────────────────────────────────────────
+function mealSlug(name) {
+  return name.trim().toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9åäö_]/g,'').slice(0,100);
+}
+function avgRating(name) {
+  const doc=allRatings[mealSlug(name)]; if(!doc?.ratings) return 0;
+  const vals=Object.values(doc.ratings).filter(v=>v>0);
+  return vals.length?vals.reduce((s,v)=>s+v,0)/vals.length:0;
+}
+function myRating(name) {
+  if(!myId) return 0;
+  return allRatings[mealSlug(name)]?.ratings?.[myId]??0;
+}
+function ratingCount(name) {
+  const doc=allRatings[mealSlug(name)]; if(!doc?.ratings) return 0;
+  return Object.values(doc.ratings).filter(v=>v>0).length;
+}
+async function rateRecipe(name,score) {
+  if(!myId){toast('Inte inloggad');return;}
+  const slug=mealSlug(name);
+  const ex=allRatings[slug]??{name,ratings:{}};
+  const cur=ex.ratings?.[myId]??0;
+  // Clicking same star again removes the rating
+  const newScore=cur===score?0:score;
+  const newRatings={...ex.ratings,[myId]:newScore};
+  try {
+    await db.collection('ratings').doc(slug).set({name,ratings:newRatings});
+    // Auto-save to library if avg >= 3.5 with >= 2 non-zero ratings
+    const vals=Object.values(newRatings).filter(v=>v>0);
+    if(vals.length>=2) {
+      const avg=vals.reduce((s,v)=>s+v,0)/vals.length;
+      if(avg>=3.5&&!library.some(l=>l.name.toLowerCase()===name.toLowerCase())) {
+        await addToLibrary(name);
+        toast(`"${name}" sparades i biblioteket! ⭐`);
+      }
+    }
+  } catch { toast('Kunde inte betygsätta'); }
+}
+function mkStarsRow(meal) {
+  const row=document.createElement('div'); row.className='mi-stars';
+  const mr=myRating(meal.name);
+  for(let i=1;i<=5;i++){
+    const b=document.createElement('button'); b.className='star-btn'+(mr>=i?' on':'');
+    b.textContent='★'; b.title=`${i} stjärna${i>1?'r':''}`;
+    b.addEventListener('click',()=>rateRecipe(meal.name,i));
+    row.appendChild(b);
+  }
+  const avg=avgRating(meal.name);
+  if(avg>0){
+    const s=document.createElement('span'); s.className='mi-avg';
+    s.textContent=`${avg.toFixed(1)} (${ratingCount(meal.name)})`;
+    row.appendChild(s);
+  }
+  return row;
+}
+
 // ── RENDER ─────────────────────────────────────────────────────────────
 function render() { if (!plan) return; isOwner?renderParent():renderChild(); }
 
-function renderParent() {
-  const list=document.getElementById('days-list'); list.innerHTML='';
-  plan.days.forEach((day,di)=>{
-    const {base,sugs}=getAllMeals(di);
-    const allM=[...base,...sugs];
-    const totalV=allM.reduce((s,m)=>s+voteCount(m.id),0);
+function filterByType(meals,mt) {
+  return mt==='lunch'?meals.filter(m=>m.type==='lunch'):meals.filter(m=>!m.type||m.type!=='lunch');
+}
 
-    const card=mkCard(di,day,totalV>0?`${totalV} röst${totalV!==1?'er':''}`:``);
-    const body=card.querySelector('.dc-body');
-    const ul=document.createElement('ul'); ul.className='ml';
-
-    if (!allM.length) ul.innerHTML=`<li style="font-size:.8rem;color:var(--t2);padding:6px 0;font-style:italic">Inga rätter ännu</li>`;
-
-    base.forEach(meal=>{
+// Builds one meal-type section and appends it to body
+function appendMealSection(body,di,base,sugs,mealType,isParent,showLabel) {
+  const bm=filterByType(base,mealType), sm=filterByType(sugs,mealType);
+  if (showLabel) {
+    const lbl=document.createElement('div'); lbl.className='meal-sec-lbl';
+    lbl.textContent=mealType==='lunch'?'Lunch':'Middag';
+    body.appendChild(lbl);
+  }
+  const ul=document.createElement('ul'); ul.className='ml';
+  if (isParent) {
+    if (!bm.length&&!sm.length) ul.innerHTML=`<li style="font-size:.8rem;color:var(--t2);padding:6px 0;font-style:italic">Inga rätter ännu</li>`;
+    bm.forEach(meal=>{
       const vc=voteCount(meal.id); const vn=voterNames(meal.id);
       const isMoving=movingMeal?.di===di&&movingMeal?.id===meal.id;
       const li=document.createElement('li'); li.className='mi';
@@ -472,7 +552,7 @@ function renderParent() {
         <button class="dbtn" data-di="${di}" data-id="${meal.id}" title="Ta bort">✕</button>`;
       if (vn.length) {
         const vrow=document.createElement('div'); vrow.className='mi-voters';
-        vn.forEach(n=>{ const c=document.createElement('span'); c.className='mi-voter'; c.textContent=n; vrow.appendChild(c); });
+        vn.forEach(n=>{const c=document.createElement('span');c.className='mi-voter';c.textContent=n;vrow.appendChild(c);});
         li.appendChild(vrow);
       }
       if (isMoving) {
@@ -480,16 +560,15 @@ function renderParent() {
         DAYS.forEach((dname,tdi)=>{
           const btn=document.createElement('button'); btn.className='move-day';
           btn.textContent=dname.slice(0,3); btn.title=dname;
-          if (tdi===di) btn.disabled=true;
-          else btn.addEventListener('click',()=>moveMeal(di,meal.id,tdi));
+          if(tdi===di) btn.disabled=true; else btn.addEventListener('click',()=>moveMeal(di,meal.id,tdi));
           picker.appendChild(btn);
         });
         li.appendChild(picker);
       }
+      li.appendChild(mkStarsRow(meal));
       ul.appendChild(li);
     });
-
-    sugs.forEach(sug=>{
+    sm.forEach(sug=>{
       const vc=voteCount(sug.id); const vn=voterNames(sug.id);
       const li=document.createElement('li'); li.className='mi';
       li.innerHTML=`<span style="font-size:.62rem;color:var(--t2);flex-shrink:0">↳</span>
@@ -498,43 +577,18 @@ function renderParent() {
         ${vc>0?`<span class="mi-vc">${vc} ✓</span>`:''}`;
       if (vn.length) {
         const vrow=document.createElement('div'); vrow.className='mi-voters';
-        vn.forEach(n=>{ const c=document.createElement('span'); c.className='mi-voter'; c.textContent=n; vrow.appendChild(c); });
+        vn.forEach(n=>{const c=document.createElement('span');c.className='mi-voter';c.textContent=n;vrow.appendChild(c);});
         li.appendChild(vrow);
       }
+      li.appendChild(mkStarsRow(sug));
       ul.appendChild(li);
     });
-
-    body.appendChild(ul);
-    body.appendChild(mkAddRow(di,true));
-    const sp=document.createElement('div'); sp.id=`sp-${di}`;
-    if (openSugPanel===di) sp.appendChild(buildSugPanel(di,true));
-    body.appendChild(sp);
-    list.appendChild(card);
-  });
-  list.querySelectorAll('.mbtn').forEach(btn=>{
-    btn.addEventListener('click',()=>toggleMovePicker(+btn.dataset.di,btn.dataset.id));
-  });
-  list.querySelectorAll('.dbtn').forEach(btn=>{
-    btn.addEventListener('click',()=>deleteMeal(+btn.dataset.di,btn.dataset.id));
-  });
-}
-
-function renderChild() {
-  const list=document.getElementById('days-list'); list.innerHTML='';
-  plan.days.forEach((day,di)=>{
-    const {base,sugs}=getAllMeals(di);
-    const allM=[...base,...sugs].sort((a,b)=>{
-      const sa=netScore(a.id), sb=netScore(b.id);
-      return sb!==sa ? sb-sa : 0;  // higher net first; equal = original order (stable sort)
-    });
-
-    const card=mkCard(di,day,''); const body=card.querySelector('.dc-body');
-    const ul=document.createElement('ul'); ul.className='ml';
-
+  } else {
+    const allM=[...bm,...sm].sort((a,b)=>{const sa=netScore(a.id),sb=netScore(b.id);return sb!==sa?sb-sa:0;});
     if (!allM.length) ul.innerHTML=`<li style="font-size:.8rem;color:var(--t2);padding:6px 0;font-style:italic">Inga förslag ännu</li>`;
-    else allM.forEach(meal=>{
-      const voted=iVoted(meal.id), downed=iDownvoted(meal.id);
-      const vc=voteCount(meal.id), dc=downCount(meal.id);
+    allM.forEach(meal=>{
+      const voted=iVoted(meal.id),downed=iDownvoted(meal.id);
+      const vc=voteCount(meal.id),dc=downCount(meal.id);
       const li=document.createElement('li'); li.className='mi';
       li.style.opacity=(downed&&!voted)?'.55':'1';
       li.innerHTML=`
@@ -543,25 +597,55 @@ function renderChild() {
         ${meal.by&&meal.by!=='Papa'?`<span class="mi-by">${esc(meal.by)}</span>`:''}
         ${vc>0?`<span class="mi-vc">${vc}</span>`:''}
         ${dc>0?`<span class="mi-vd">–${dc}</span>`:''}
-        <button class="vbtn-d${downed?' on':''}" data-di="${di}" data-id="${meal.id}" title="Rösta ner">–</button>
-      `;
+        <button class="vbtn-d${downed?' on':''}" data-di="${di}" data-id="${meal.id}" title="Rösta ner">–</button>`;
+      li.appendChild(mkStarsRow(meal));
       ul.appendChild(li);
     });
+  }
+  body.appendChild(ul);
+  body.appendChild(mkAddRow(di,isParent,mealType));
+  const sp=document.createElement('div'); sp.id=`sp-${di}-${mealType}`;
+  if (openSugPanel===di&&openSugType===mealType) sp.appendChild(buildSugPanel(di,isParent,mealType));
+  body.appendChild(sp);
+}
 
-    body.appendChild(ul);
-    body.appendChild(mkAddRow(di,false));
-    const sp=document.createElement('div'); sp.id=`sp-${di}`;
-    if (openSugPanel===di) sp.appendChild(buildSugPanel(di,false));
-    body.appendChild(sp);
+function renderParent() {
+  const list=document.getElementById('days-list'); list.innerHTML='';
+  plan.days.forEach((day,di)=>{
+    const {base,sugs}=getAllMeals(di);
+    const totalV=[...base,...sugs].reduce((s,m)=>s+voteCount(m.id),0);
+    const card=mkCard(di,day,totalV>0?`${totalV} röst${totalV!==1?'er':''}`:``);
+    const body=card.querySelector('.dc-body');
+    const isSatSun=di===3||di===4;
+    if (isSatSun) {
+      appendMealSection(body,di,base,sugs,'lunch',true,true);
+      appendMealSection(body,di,base,sugs,'middag',true,true);
+    } else {
+      appendMealSection(body,di,base,sugs,'middag',true,false);
+    }
     list.appendChild(card);
   });
+  list.querySelectorAll('.mbtn').forEach(btn=>{btn.addEventListener('click',()=>toggleMovePicker(+btn.dataset.di,btn.dataset.id));});
+  list.querySelectorAll('.dbtn').forEach(btn=>{btn.addEventListener('click',()=>deleteMeal(+btn.dataset.di,btn.dataset.id));});
+}
 
-  list.querySelectorAll('.vbtn').forEach(btn=>{
-    btn.addEventListener('click',()=>toggleVote(+btn.dataset.di,btn.dataset.id));
+function renderChild() {
+  const list=document.getElementById('days-list'); list.innerHTML='';
+  plan.days.forEach((day,di)=>{
+    const {base,sugs}=getAllMeals(di);
+    const card=mkCard(di,day,'');
+    const body=card.querySelector('.dc-body');
+    const isSatSun=di===3||di===4;
+    if (isSatSun) {
+      appendMealSection(body,di,base,sugs,'lunch',false,true);
+      appendMealSection(body,di,base,sugs,'middag',false,true);
+    } else {
+      appendMealSection(body,di,base,sugs,'middag',false,false);
+    }
+    list.appendChild(card);
   });
-  list.querySelectorAll('.vbtn-d').forEach(btn=>{
-    btn.addEventListener('click',()=>toggleDown(+btn.dataset.di,btn.dataset.id));
-  });
+  list.querySelectorAll('.vbtn').forEach(btn=>{btn.addEventListener('click',()=>toggleVote(+btn.dataset.di,btn.dataset.id));});
+  list.querySelectorAll('.vbtn-d').forEach(btn=>{btn.addEventListener('click',()=>toggleDown(+btn.dataset.di,btn.dataset.id));});
 }
 
 function mkCard(di,day,vcLabel) {
@@ -575,154 +659,110 @@ function mkCard(di,day,vcLabel) {
   return card;
 }
 
-function mkAddRow(di,isParent) {
+function mkAddRow(di,isParent,mealType='middag') {
   const ar=document.createElement('div'); ar.className='ar';
-  if (isParent) {
-    ar.innerHTML=`
-      <div class="ac-wrap">
-        <input type="text" class="ar-inp" id="pai-${di}" placeholder="Lägg till rätt…" maxlength="60" autocomplete="off" />
-        <div class="ac-drop" id="ac-${di}" hidden></div>
-      </div>
-      <button class="btn btn-a btn-sm" data-di="${di}" data-role="add">+</button>
-      <button class="spbtn${openSugPanel===di?' open':''}" data-di="${di}" data-role="sug">Förslag</button>
-    `;
-    const inp=ar.querySelector(`#pai-${di}`);
-    const drop=ar.querySelector(`#ac-${di}`);
-
-    function showDrop() {
-      const q=inp.value.trim().toLowerCase(); if (!q) { drop.hidden=true; return; }
+  const open=openSugPanel===di&&openSugType===mealType;
+  function wireAc(inp,drop,onSelect,onEnter) {
+    function show() {
+      const q=inp.value.trim().toLowerCase(); if(!q){drop.hidden=true;return;}
       const taken=new Set((plan?.days?.[di]?.meals??[]).map(m=>m.name.toLowerCase()));
       const libM=library.filter(m=>!taken.has(m.name.toLowerCase())&&m.name.toLowerCase().includes(q));
       const mealM=MEALS.filter(m=>!taken.has(m.toLowerCase())&&m.toLowerCase().includes(q)&&!libM.some(l=>l.name.toLowerCase()===m.toLowerCase()));
       const all=[...libM.map(m=>({name:m.name,lib:true})),...mealM.map(m=>({name:m,lib:false}))].slice(0,8);
-      if (!all.length) { drop.hidden=true; return; }
+      if(!all.length){drop.hidden=true;return;}
       drop.innerHTML='';
       all.forEach(item=>{
         const row=document.createElement('div');
         row.className='ac-item'+(item.lib?' lib':'');
         row.textContent=item.name;
-        row.addEventListener('mousedown',e=>{ e.preventDefault(); addMeal(di,item.name); inp.value=''; drop.hidden=true; });
+        row.addEventListener('mousedown',e=>{e.preventDefault();onSelect(item.name);inp.value='';drop.hidden=true;});
         drop.appendChild(row);
       });
       drop.hidden=false;
     }
-
-    inp.addEventListener('input',showDrop);
-    inp.addEventListener('blur',()=>setTimeout(()=>{ drop.hidden=true; },150));
+    inp.addEventListener('input',show);
+    inp.addEventListener('blur',()=>setTimeout(()=>{drop.hidden=true;},150));
     inp.addEventListener('keydown',e=>{
-      if (e.key==='Escape') { drop.hidden=true; return; }
-      if (!drop.hidden&&(e.key==='ArrowDown'||e.key==='ArrowUp')) {
+      if(e.key==='Escape'){drop.hidden=true;return;}
+      if(!drop.hidden&&(e.key==='ArrowDown'||e.key==='ArrowUp')){
         e.preventDefault();
         const items=[...drop.querySelectorAll('.ac-item')];
         const cur=drop.querySelector('.ac-item.focused');
         let idx=items.indexOf(cur);
-        if (e.key==='ArrowDown') idx=Math.min(idx+1,items.length-1);
-        else idx=Math.max(idx-1,0);
-        if (cur) cur.classList.remove('focused');
+        if(e.key==='ArrowDown') idx=Math.min(idx+1,items.length-1); else idx=Math.max(idx-1,0);
+        if(cur) cur.classList.remove('focused');
         items[idx]?.classList.add('focused');
         inp.value=items[idx]?.textContent??inp.value;
         return;
       }
-      if (e.key==='Enter') { addMeal(di); drop.hidden=true; }
+      if(e.key==='Enter'){onEnter();drop.hidden=true;}
     });
-    ar.querySelector('[data-role="add"]').addEventListener('click',e=>{ addMeal(+e.target.dataset.di); drop.hidden=true; });
-    ar.querySelector('[data-role="sug"]').addEventListener('click',e=>toggleSugPanel(+e.target.dataset.di));
-  } else {
+  }
+  if (isParent) {
+    const pid=`pai-${di}-${mealType}`, did=`ac-${di}-${mealType}`;
     ar.innerHTML=`
       <div class="ac-wrap">
-        <input type="text" class="ar-inp" id="ci-${di}" placeholder="Eget förslag…" maxlength="60" autocomplete="off" />
-        <div class="ac-drop" id="acc-${di}" hidden></div>
+        <input type="text" class="ar-inp" id="${pid}" placeholder="Lägg till rätt…" maxlength="60" autocomplete="off" />
+        <div class="ac-drop" id="${did}" hidden></div>
       </div>
-      <button class="btn btn-g btn-sm" data-di="${di}" data-role="add">+ Förslag</button>
-      <button class="spbtn${openSugPanel===di?' open':''}" data-di="${di}" data-role="sug">Lista</button>
-    `;
-    const inp=ar.querySelector(`#ci-${di}`);
-    const drop=ar.querySelector(`#acc-${di}`);
-
-    function showDropC() {
-      const q=inp.value.trim().toLowerCase(); if (!q) { drop.hidden=true; return; }
-      const taken=new Set([
-        ...(plan?.days?.[di]?.meals??[]).map(m=>m.name.toLowerCase()),
-        ...Object.values(allVotes).flatMap(v=>(v[wk()]?.suggestions??{})[di]??[]).map(s=>s.name.toLowerCase())
-      ]);
-      const libM=library.filter(m=>!taken.has(m.name.toLowerCase())&&m.name.toLowerCase().includes(q));
-      const mealM=MEALS.filter(m=>!taken.has(m.toLowerCase())&&m.toLowerCase().includes(q)&&!libM.some(l=>l.name.toLowerCase()===m.toLowerCase()));
-      const all=[...libM.map(m=>({name:m.name,lib:true})),...mealM.map(m=>({name:m,lib:false}))].slice(0,8);
-      if (!all.length) { drop.hidden=true; return; }
-      drop.innerHTML='';
-      all.forEach(item=>{
-        const row=document.createElement('div');
-        row.className='ac-item'+(item.lib?' lib':'');
-        row.textContent=item.name;
-        row.addEventListener('mousedown',e=>{ e.preventDefault(); addSuggestion(di,item.name); inp.value=''; drop.hidden=true; });
-        drop.appendChild(row);
-      });
-      drop.hidden=false;
-    }
-
-    inp.addEventListener('input',showDropC);
-    inp.addEventListener('blur',()=>setTimeout(()=>{ drop.hidden=true; },150));
-    inp.addEventListener('keydown',e=>{
-      if (e.key==='Escape') { drop.hidden=true; return; }
-      if (!drop.hidden&&(e.key==='ArrowDown'||e.key==='ArrowUp')) {
-        e.preventDefault();
-        const items=[...drop.querySelectorAll('.ac-item')];
-        const cur=drop.querySelector('.ac-item.focused');
-        let idx=items.indexOf(cur);
-        if (e.key==='ArrowDown') idx=Math.min(idx+1,items.length-1);
-        else idx=Math.max(idx-1,0);
-        if (cur) cur.classList.remove('focused');
-        items[idx]?.classList.add('focused');
-        inp.value=items[idx]?.textContent??inp.value;
-        return;
-      }
-      if (e.key==='Enter') { addSuggestion(di); drop.hidden=true; }
-    });
-    ar.querySelector('[data-role="add"]').addEventListener('click',e=>{ addSuggestion(+e.target.dataset.di); drop.hidden=true; });
-    ar.querySelector('[data-role="sug"]').addEventListener('click',e=>toggleSugPanel(+e.target.dataset.di));
+      <button class="btn btn-a btn-sm" data-di="${di}" data-mt="${mealType}" data-role="add">+</button>
+      <button class="spbtn${open?' open':''}" data-di="${di}" data-mt="${mealType}" data-role="sug">Förslag</button>`;
+    const inp=ar.querySelector(`#${pid}`), drop=ar.querySelector(`#${did}`);
+    wireAc(inp,drop,name=>addMeal(di,name,mealType),()=>addMeal(di,null,mealType));
+    ar.querySelector('[data-role="add"]').addEventListener('click',e=>{addMeal(+e.target.dataset.di,null,e.target.dataset.mt);drop.hidden=true;});
+    ar.querySelector('[data-role="sug"]').addEventListener('click',e=>toggleSugPanel(+e.target.dataset.di,e.target.dataset.mt));
+  } else {
+    const cid=`ci-${di}-${mealType}`, cdid=`acc-${di}-${mealType}`;
+    ar.innerHTML=`
+      <div class="ac-wrap">
+        <input type="text" class="ar-inp" id="${cid}" placeholder="Eget förslag…" maxlength="60" autocomplete="off" />
+        <div class="ac-drop" id="${cdid}" hidden></div>
+      </div>
+      <button class="btn btn-g btn-sm" data-di="${di}" data-mt="${mealType}" data-role="add">+ Förslag</button>
+      <button class="spbtn${open?' open':''}" data-di="${di}" data-mt="${mealType}" data-role="sug">Lista</button>`;
+    const inp=ar.querySelector(`#${cid}`), drop=ar.querySelector(`#${cdid}`);
+    wireAc(inp,drop,name=>addSuggestion(di,name,mealType),()=>addSuggestion(di,null,mealType));
+    ar.querySelector('[data-role="add"]').addEventListener('click',e=>{addSuggestion(+e.target.dataset.di,null,e.target.dataset.mt);drop.hidden=true;});
+    ar.querySelector('[data-role="sug"]').addEventListener('click',e=>toggleSugPanel(+e.target.dataset.di,e.target.dataset.mt));
   }
   return ar;
 }
 
-function toggleSugPanel(di) {
-  openSugPanel=openSugPanel===di?null:di; render();
+function toggleSugPanel(di,type='middag') {
+  if(openSugPanel===di&&openSugType===type){openSugPanel=null;openSugType='middag';}
+  else{openSugPanel=di;openSugType=type;}
+  render();
 }
 
 // ── SUGGESTION PANEL ───────────────────────────────────────────────────
-function buildSugPanel(di,isParent) {
+function buildSugPanel(di,isParent,mealType='middag') {
   const {base,sugs}=getAllMeals(di);
   const taken=new Set([...base,...sugs].map(m=>m.name.toLowerCase()));
   const avail=MEALS.filter(m=>!taken.has(m.toLowerCase()));
   const picks=avail.sort(()=>Math.random()-.5).slice(0,8);
+  const spKey=`sp-${di}-${mealType}`;
 
   const panel=document.createElement('div'); panel.className='sppanel';
-
-  // ── Section 1: Quick picks ──
   panel.innerHTML=`<div class="sppanel-lbl">Snabbförslag</div>`;
   const pills=document.createElement('div'); pills.className='sppills';
   picks.forEach(name=>{
     const btn=document.createElement('button'); btn.className='sppill';
     btn.textContent=name;
-    btn.addEventListener('click',()=>{ addByName(di,isParent,name); openSugPanel=null; });
+    btn.addEventListener('click',()=>{ addByName(di,isParent,name,mealType); openSugPanel=null; });
     pills.appendChild(btn);
   });
   panel.appendChild(pills);
 
-  // "Fler" button — re-renders panel in-place
   const fler=document.createElement('button'); fler.className='spp-fler'; fler.textContent='Fler förslag →';
-  fler.addEventListener('click',()=>{
-    const sp=document.getElementById(`sp-${di}`);
-    if(sp){ sp.innerHTML=''; sp.appendChild(buildSugPanel(di,isParent)); }
-  });
+  fler.addEventListener('click',()=>{ const sp=document.getElementById(spKey); if(sp){sp.innerHTML='';sp.appendChild(buildSugPanel(di,isParent,mealType));} });
   panel.appendChild(fler);
 
-  // ── Section 2: Library ──
   const libSec=document.createElement('div'); libSec.className='spp-sec';
   const libLbl=document.createElement('div'); libLbl.className='sppanel-lbl';
-  libLbl.textContent='Bibliotek' + (isOwner?' — klicka för att lägga till':'');
+  libLbl.textContent='Bibliotek'+(isOwner?' — klicka för att lägga till':'');
   libSec.appendChild(libLbl);
-
-  const libAvail=library.filter(m=>!taken.has(m.name.toLowerCase()));
+  const libAvail=library.filter(m=>!taken.has(m.name.toLowerCase()))
+    .sort((a,b)=>avgRating(b.name)-avgRating(a.name));
   if (!libAvail.length) {
     const emp=document.createElement('div');
     emp.style.cssText='font-size:.78rem;color:var(--t2);padding:4px 0;font-style:italic';
@@ -732,9 +772,11 @@ function buildSugPanel(di,isParent) {
     const libList=document.createElement('div'); libList.className='lib-list';
     libAvail.forEach(item=>{
       const row=document.createElement('div'); row.className='lib-item';
-      row.innerHTML=`<span class="lib-item-name">${esc(item.name)}</span>`;
+      const avg=avgRating(item.name), cnt=ratingCount(item.name);
+      const starStr=avg>0?` <span style="font-size:.66rem;color:var(--am)">★ ${avg.toFixed(1)}</span>`:'';
+      row.innerHTML=`<span class="lib-item-name">${esc(item.name)}${starStr}</span>`;
       const addBtn=document.createElement('button'); addBtn.className='lib-add'; addBtn.textContent='Lägg till';
-      addBtn.addEventListener('click',()=>{ addByName(di,isParent,item.name); openSugPanel=null; });
+      addBtn.addEventListener('click',()=>{ addByName(di,isParent,item.name,mealType); openSugPanel=null; });
       row.appendChild(addBtn);
       if (isOwner) {
         const del=document.createElement('button'); del.className='lib-del'; del.textContent='✕';
@@ -748,41 +790,38 @@ function buildSugPanel(di,isParent) {
   }
   panel.appendChild(libSec);
 
-  // ── Section 3: Import (parent only) ──
   if (isOwner) {
+    const k=`${di}-${mealType}`;
     const impSec=document.createElement('div'); impSec.className='spp-sec';
     impSec.innerHTML=`
       <div class="sppanel-lbl">Importera till biblioteket</div>
       <div style="font-size:.72rem;color:var(--t2);margin-bottom:4px">Klistra in en länk (t.ex. köket.se) eller skriv receptnamn, ett per rad</div>
       <div class="spp-row">
-        <input type="text" class="spp-inp" id="url-inp-${di}" placeholder="https://www.koket.se/recept/…" />
-        <button class="btn btn-am btn-sm" id="url-add-${di}">Lägg till</button>
+        <input type="text" class="spp-inp" id="url-inp-${k}" placeholder="https://www.koket.se/recept/…" />
+        <button class="btn btn-am btn-sm" id="url-add-${k}">Lägg till</button>
       </div>
-      <textarea class="spp-inp spp-ta" id="paste-inp-${di}"
+      <textarea class="spp-inp spp-ta" id="paste-inp-${k}"
                 placeholder="Pasta Bolognese&#10;Köttbullar&#10;Tacos" style="margin-top:6px"></textarea>
-      <button class="btn btn-am btn-sm" id="paste-add-${di}" style="margin-top:6px">
-        Spara i biblioteket
-      </button>
-    `;
-    impSec.querySelector(`#url-add-${di}`).addEventListener('click',()=>addFromUrl(di));
-    impSec.querySelector(`#url-inp-${di}`).addEventListener('keydown',e=>{ if(e.key==='Enter') addFromUrl(di); });
-    impSec.querySelector(`#paste-add-${di}`).addEventListener('click',()=>addFromPaste(di));
+      <button class="btn btn-am btn-sm" id="paste-add-${k}" style="margin-top:6px">Spara i biblioteket</button>`;
+    impSec.querySelector(`#url-add-${k}`).addEventListener('click',()=>addFromUrl(di,mealType));
+    impSec.querySelector(`#url-inp-${k}`).addEventListener('keydown',e=>{ if(e.key==='Enter') addFromUrl(di,mealType); });
+    impSec.querySelector(`#paste-add-${k}`).addEventListener('click',()=>addFromPaste(di,mealType));
     panel.appendChild(impSec);
   }
-
   return panel;
 }
 
 // ── ACTIONS ────────────────────────────────────────────────────────────
-async function addByName(di,isParent,name) {
-  if (isParent) await addMeal(di,name); else await addSuggestion(di,name);
+async function addByName(di,isParent,name,mealType='middag') {
+  if (isParent) await addMeal(di,name,mealType); else await addSuggestion(di,name,mealType);
 }
 
-async function addMeal(di,nameOverride) {
-  const name=nameOverride||(document.getElementById(`pai-${di}`)?.value.trim());
+async function addMeal(di,nameOverride,mealType='middag') {
+  const inputId=`pai-${di}-${mealType}`;
+  const name=nameOverride||(document.getElementById(inputId)?.value.trim());
   if (!name) return;
-  if (!nameOverride) { const el=document.getElementById(`pai-${di}`); if(el) el.value=''; }
-  const newMeal={id:uid(),name,by:'Papa'};
+  if (!nameOverride) { const el=document.getElementById(inputId); if(el) el.value=''; }
+  const newMeal={id:uid(),name,by:'Papa',type:mealType};
   const newDays=plan.days.map((d,i)=>i===di?{...d,meals:[...d.meals,newMeal]}:d);
   try { await db.collection('plans').doc(weekStart).update({days:newDays}); }
   catch { toast('Kunde inte spara'); }
@@ -812,12 +851,13 @@ async function deleteMeal(di,mealId) {
   catch { toast('Fel — försök igen'); }
 }
 
-async function addSuggestion(di,nameOverride) {
+async function addSuggestion(di,nameOverride,mealType='middag') {
   if (!myId) { toast('Inte inloggad'); return; }
-  const name=nameOverride||(document.getElementById(`ci-${di}`)?.value.trim());
+  const inputId=`ci-${di}-${mealType}`;
+  const name=nameOverride||(document.getElementById(inputId)?.value.trim());
   if (!name) return;
-  if (!nameOverride) { const el=document.getElementById(`ci-${di}`); if(el) el.value=''; }
-  const sug={id:uid(),name};
+  if (!nameOverride) { const el=document.getElementById(inputId); if(el) el.value=''; }
+  const sug={id:uid(),name,type:mealType};
   const ex=allVotes[myId]??{}, exw=ex[wk()]??{};
   const exs=exw.suggestions??{}, ds=exs[di]??[];
   const picks={...(exw.picks??{}),[sug.id]:true};
@@ -869,20 +909,19 @@ async function removeFromLibrary(id) {
   catch { toast('Fel'); }
 }
 
-async function addFromUrl(di) {
-  const inp=document.getElementById(`url-inp-${di}`);
+async function addFromUrl(di,mealType='middag') {
+  const inp=document.getElementById(`url-inp-${di}-${mealType}`);
   const url=inp.value.trim(); if (!url) return;
   const name=extractNameFromUrl(url);
   if (!name) { toast('Kunde inte tolka URL:en'); return; }
   inp.value='';
   await addToLibrary(name);
-  // Also add to this day
-  await addMeal(di,name);
+  await addMeal(di,name,mealType);
   openSugPanel=null;
 }
 
-async function addFromPaste(di) {
-  const ta=document.getElementById(`paste-inp-${di}`);
+async function addFromPaste(di,mealType='middag') {
+  const ta=document.getElementById(`paste-inp-${di}-${mealType}`);
   const lines=ta.value.split('\n').map(l=>l.trim()).filter(Boolean);
   if (!lines.length) return;
   ta.value='';
