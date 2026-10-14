@@ -233,6 +233,19 @@ button{cursor:pointer;font-family:inherit;transition:.12s all}
 .star-btn{background:none;border:none;font-size:.88rem;color:var(--bd);padding:2px 1px;line-height:1;cursor:pointer;transition:.08s color}
 .star-btn:hover,.star-btn.on{color:var(--am)}
 .mi-avg{font-size:.64rem;color:var(--t2);margin-left:5px}
+
+/* wishlist */
+.wl-item{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bd)}
+.wl-item:last-child{border-bottom:none}
+.wl-name{flex:1;font-size:.86rem;min-width:0}
+.wl-by{font-size:.68rem;color:var(--t2);white-space:nowrap}
+.wl-del{background:none;border:none;color:var(--t2);font-size:.72rem;padding:3px 5px;border-radius:5px}
+.wl-del:hover{color:var(--rd)}
+.wl-sched{font-size:.7rem;font-weight:600;padding:3px 10px;border-radius:20px;
+  border:1px solid var(--ac);background:var(--ac-d);color:var(--ac);white-space:nowrap}
+.wl-sched:hover{opacity:.8}
+.wl-sched.on{background:var(--ac);color:#fff}
+.wl-dp{flex:0 0 100%;display:flex;flex-wrap:wrap;gap:4px;padding:4px 0 2px 0;margin-left:0}
 @media (max-width:480px){.cnt{padding:12px 12px}}
 </style>
 
@@ -339,8 +352,9 @@ let planUnsub=null, votesUnsub=null, libUnsub=null;
 let openSugPanel=null; // dayIdx or null
 let openSugType='middag'; // 'lunch'|'middag' for Sat/Sun panels
 let movingMeal=null;  // {di, id} or null
-let allRatings={};  // { mealSlug: { name, ratings: { userId: score } } }
+let allRatings={};  // { userId: { ratings: { slug: score } } }
 let ratingsUnsub=null;
+let schedulingWish=null;  // wishId being scheduled by parent, or null
 
 // ── TOAST ──────────────────────────────────────────────────────────────
 let toastT;
@@ -434,7 +448,7 @@ function updateWeekLabel() {
 
 function changeWeek(delta) {
   const mon=new Date(weekStart+'T12:00:00'); mon.setDate(mon.getDate()+delta);
-  weekStart=isoDate(mon); openSugPanel=null; openSugType='middag'; movingMeal=null; subscribeWeek();
+  weekStart=isoDate(mon); openSugPanel=null; openSugType='middag'; movingMeal=null; schedulingWish=null; subscribeWeek();
 }
 
 // ── DERIVED ────────────────────────────────────────────────────────────
@@ -465,6 +479,39 @@ function voterNames(mealId) {
 }
 function dvoterNames(mealId) {
   return Object.values(allVotes).filter(v=>!!(v[wk()]?.downs?.[mealId])).map(v=>v.name||'Barn');
+}
+
+// ── WISHLIST ───────────────────────────────────────────────────────────
+function getAllWishes() {
+  const result=[];
+  Object.entries(allVotes).forEach(([uid,v])=>{
+    (v.wishlist??[]).forEach(w=>result.push({...w,by:v.name||'Barn',userId:uid}));
+  });
+  return result;
+}
+async function addWish(nameOverride) {
+  if(!myId){toast('Inte inloggad');return;}
+  const inp=document.getElementById('wish-inp');
+  const name=nameOverride||(inp?.value.trim());
+  if(!name)return;
+  if(inp&&!nameOverride)inp.value='';
+  const ex=allVotes[myId]??{};
+  const wl=ex.wishlist??[];
+  if(wl.some(w=>w.name.toLowerCase()===name.toLowerCase()))return;
+  try {
+    await db.collection('votes').doc(myId).set({...ex,name:myName||(ex.name||'Barn'),wishlist:[...wl,{id:uid(),name}]});
+  } catch{toast('Kunde inte spara');}
+}
+async function removeWish(wishId) {
+  if(!myId)return;
+  const ex=allVotes[myId]??{};
+  const wl=(ex.wishlist??[]).filter(w=>w.id!==wishId);
+  try{await db.collection('votes').doc(myId).set({...ex,name:myName||(ex.name||'Barn'),wishlist:wl});}catch{}
+}
+async function scheduleWish(di,wishName) {
+  await addMeal(di,wishName,'middag');
+  schedulingWish=null;
+  toast(`"${wishName}" lagd på ${DAYS[di]}`);
 }
 
 // ── RATINGS ────────────────────────────────────────────────────────────
@@ -632,6 +679,8 @@ function renderParent() {
   });
   list.querySelectorAll('.mbtn').forEach(btn=>{btn.addEventListener('click',()=>toggleMovePicker(+btn.dataset.di,btn.dataset.id));});
   list.querySelectorAll('.dbtn').forEach(btn=>{btn.addEventListener('click',()=>deleteMeal(+btn.dataset.di,btn.dataset.id));});
+  // Barnens önskelista
+  list.appendChild(mkParentWishCard());
 }
 
 function renderChild() {
@@ -651,6 +700,105 @@ function renderChild() {
   });
   list.querySelectorAll('.vbtn').forEach(btn=>{btn.addEventListener('click',()=>toggleVote(+btn.dataset.di,btn.dataset.id));});
   list.querySelectorAll('.vbtn-d').forEach(btn=>{btn.addEventListener('click',()=>toggleDown(+btn.dataset.di,btn.dataset.id));});
+  // Mina önskemål för nästa vecka
+  list.appendChild(mkChildWishCard());
+}
+
+function mkChildWishCard() {
+  const card=document.createElement('div'); card.className='dc';
+  card.style.setProperty('--da','var(--gn)');
+  card.innerHTML=`<div class="dc-strip"></div>
+    <div class="dc-head">
+      <span class="dc-name">Mina önskemål</span>
+      <span class="dc-date">för kommande vecka</span>
+    </div><div class="dc-body"></div>`;
+  const body=card.querySelector('.dc-body');
+  const myWishes=(allVotes[myId]?.wishlist??[]);
+  const ul=document.createElement('ul'); ul.className='ml';
+  if(!myWishes.length){
+    ul.innerHTML=`<li style="font-size:.8rem;color:var(--t2);padding:6px 0;font-style:italic">Inga önskemål ännu — lägg till nedan</li>`;
+  }
+  myWishes.forEach(w=>{
+    const li=document.createElement('li'); li.className='wl-item';
+    li.innerHTML=`<span class="wl-name">${esc(w.name)}</span>
+      <button class="wl-del" data-id="${w.id}" title="Ta bort">✕</button>`;
+    li.querySelector('.wl-del').addEventListener('click',()=>removeWish(w.id));
+    ul.appendChild(li);
+  });
+  body.appendChild(ul);
+  // Add row with autocomplete
+  const ar=document.createElement('div'); ar.className='ar';
+  ar.innerHTML=`<div class="ac-wrap">
+    <input type="text" class="ar-inp" id="wish-inp" placeholder="Lägg till önskning…" maxlength="60" autocomplete="off" />
+    <div class="ac-drop" id="wish-drop" hidden></div>
+  </div>
+  <button class="btn btn-g btn-sm" id="wish-add">+ Lägg till</button>`;
+  const inp=ar.querySelector('#wish-inp'), drop=ar.querySelector('#wish-drop');
+  function showAc(){
+    const q=inp.value.trim().toLowerCase(); if(!q){drop.hidden=true;return;}
+    const taken=new Set((allVotes[myId]?.wishlist??[]).map(w=>w.name.toLowerCase()));
+    const libM=library.filter(m=>!taken.has(m.name.toLowerCase())&&m.name.toLowerCase().includes(q));
+    const mealM=MEALS.filter(m=>!taken.has(m.toLowerCase())&&m.toLowerCase().includes(q)&&!libM.some(l=>l.name.toLowerCase()===m.toLowerCase()));
+    const all=[...libM.map(m=>({name:m.name,lib:true})),...mealM.map(m=>({name:m,lib:false}))].slice(0,8);
+    if(!all.length){drop.hidden=true;return;}
+    drop.innerHTML='';
+    all.forEach(item=>{
+      const row=document.createElement('div'); row.className='ac-item'+(item.lib?' lib':'');
+      row.textContent=item.name;
+      row.addEventListener('mousedown',e=>{e.preventDefault();addWish(item.name);drop.hidden=true;});
+      drop.appendChild(row);
+    });
+    drop.hidden=false;
+  }
+  inp.addEventListener('input',showAc);
+  inp.addEventListener('blur',()=>setTimeout(()=>{drop.hidden=true;},150));
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter'){addWish(null);drop.hidden=true;}});
+  ar.querySelector('#wish-add').addEventListener('click',()=>addWish(null));
+  body.appendChild(ar);
+  return card;
+}
+
+function mkParentWishCard() {
+  const wishes=getAllWishes();
+  const card=document.createElement('div'); card.className='dc';
+  card.style.setProperty('--da','var(--gn)');
+  const cnt=wishes.length;
+  card.innerHTML=`<div class="dc-strip"></div>
+    <div class="dc-head">
+      <span class="dc-name">Barnens önskemål</span>
+      <span class="dc-date">${cnt?cnt+' önskemål':'inga ännu'}</span>
+    </div><div class="dc-body"></div>`;
+  const body=card.querySelector('.dc-body');
+  if(!wishes.length){
+    body.innerHTML=`<p style="font-size:.8rem;color:var(--t2);padding:6px 0;font-style:italic">Barnen har inte lagt in några önskemål än.</p>`;
+    return card;
+  }
+  const ul=document.createElement('ul'); ul.className='ml';
+  wishes.forEach(w=>{
+    const isScheducing=schedulingWish===w.id;
+    const li=document.createElement('li'); li.className='wl-item'; li.style.flexWrap='wrap';
+    li.innerHTML=`<span class="wl-name">${esc(w.name)}</span>
+      <span class="wl-by">${esc(w.by)}</span>
+      <button class="wl-sched${isScheducing?' on':''}" data-id="${w.id}">
+        ${isScheducing?'Välj dag ↓':'Schemalägg →'}
+      </button>`;
+    li.querySelector('.wl-sched').addEventListener('click',()=>{
+      schedulingWish=schedulingWish===w.id?null:w.id; render();
+    });
+    if(isScheducing){
+      const dp=document.createElement('div'); dp.className='wl-dp';
+      DAYS.forEach((dname,tdi)=>{
+        const btn=document.createElement('button'); btn.className='move-day';
+        btn.textContent=dname.slice(0,3); btn.title=dname;
+        btn.addEventListener('click',()=>scheduleWish(tdi,w.name));
+        dp.appendChild(btn);
+      });
+      li.appendChild(dp);
+    }
+    ul.appendChild(li);
+  });
+  body.appendChild(ul);
+  return card;
 }
 
 function mkCard(di,day,vcLabel) {
