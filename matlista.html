@@ -117,7 +117,8 @@ button{cursor:pointer;font-family:inherit;transition:.12s all}
 .dbtn{width:26px;height:26px;border:none;background:none;color:var(--t2);font-size:.72rem;border-radius:5px;flex-shrink:0}
 .dbtn:hover{color:var(--rd)}
 
-.ar{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--bd)}
+.ar{display:flex;flex-direction:column;gap:6px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--bd)}
+.ar-row{display:flex;gap:7px}
 .ar-inp{
   flex:1;min-width:0;background:var(--s2);border:1px solid var(--bd);
   border-radius:7px;padding:7px 10px;font-size:.84rem;font-family:inherit;color:var(--t1);
@@ -731,11 +732,13 @@ function mkChildWishCard() {
   body.appendChild(ul);
   // Add row with autocomplete
   const ar=document.createElement('div'); ar.className='ar';
-  ar.innerHTML=`<div class="ac-wrap">
-    <input type="text" class="ar-inp" id="wish-inp" placeholder="Lägg till önskning…" maxlength="60" autocomplete="off" />
-    <div class="ac-drop" id="wish-drop" hidden></div>
-  </div>
-  <button class="btn btn-g btn-sm" id="wish-add">+ Lägg till</button>`;
+  ar.innerHTML=`<div class="ar-row">
+    <div class="ac-wrap">
+      <input type="text" class="ar-inp" id="wish-inp" placeholder="Lägg till önskning…" maxlength="60" autocomplete="off" />
+      <div class="ac-drop" id="wish-drop" hidden></div>
+    </div>
+    <button class="btn btn-g btn-sm" id="wish-add">+ Lägg till</button>
+  </div>`;
   const inp=ar.querySelector('#wish-inp'), drop=ar.querySelector('#wish-drop');
   function showAc(){
     const q=inp.value.trim().toLowerCase(); if(!q){drop.hidden=true;return;}
@@ -857,12 +860,14 @@ function mkAddRow(di,isParent,mealType='middag') {
   if (isParent) {
     const pid=`pai-${di}-${mealType}`, did=`ac-${di}-${mealType}`;
     ar.innerHTML=`
-      <div class="ac-wrap">
-        <input type="text" class="ar-inp" id="${pid}" placeholder="Lägg till rätt…" maxlength="60" autocomplete="off" />
-        <div class="ac-drop" id="${did}" hidden></div>
+      <div class="ar-row">
+        <div class="ac-wrap">
+          <input type="text" class="ar-inp" id="${pid}" placeholder="Lägg till rätt…" maxlength="60" autocomplete="off" />
+          <div class="ac-drop" id="${did}" hidden></div>
+        </div>
+        <button class="btn btn-a btn-sm" data-di="${di}" data-mt="${mealType}" data-role="add">+</button>
       </div>
-      <button class="btn btn-a btn-sm" data-di="${di}" data-mt="${mealType}" data-role="add">+</button>
-      <button class="spbtn${open?' open':''}" data-di="${di}" data-mt="${mealType}" data-role="sug">Förslag</button>`;
+      <button class="spbtn${open?' open':''}" data-di="${di}" data-mt="${mealType}" data-role="sug">▦ Förslag</button>`;
     const inp=ar.querySelector(`#${pid}`), drop=ar.querySelector(`#${did}`);
     wireAc(inp,drop,name=>addMeal(di,name,mealType),()=>addMeal(di,null,mealType));
     ar.querySelector('[data-role="add"]').addEventListener('click',e=>{addMeal(+e.target.dataset.di,null,e.target.dataset.mt);drop.hidden=true;});
@@ -870,12 +875,14 @@ function mkAddRow(di,isParent,mealType='middag') {
   } else {
     const cid=`ci-${di}-${mealType}`, cdid=`acc-${di}-${mealType}`;
     ar.innerHTML=`
-      <div class="ac-wrap">
-        <input type="text" class="ar-inp" id="${cid}" placeholder="Eget förslag…" maxlength="60" autocomplete="off" />
-        <div class="ac-drop" id="${cdid}" hidden></div>
+      <div class="ar-row">
+        <div class="ac-wrap">
+          <input type="text" class="ar-inp" id="${cid}" placeholder="Eget förslag…" maxlength="60" autocomplete="off" />
+          <div class="ac-drop" id="${cdid}" hidden></div>
+        </div>
+        <button class="btn btn-g btn-sm" data-di="${di}" data-mt="${mealType}" data-role="add">+ Lägg till</button>
       </div>
-      <button class="btn btn-g btn-sm" data-di="${di}" data-mt="${mealType}" data-role="add">+ Förslag</button>
-      <button class="spbtn${open?' open':''}" data-di="${di}" data-mt="${mealType}" data-role="sug">Lista</button>`;
+      <button class="spbtn${open?' open':''}" data-di="${di}" data-mt="${mealType}" data-role="sug">▦ Förslags&shy;lista</button>`;
     const inp=ar.querySelector(`#${cid}`), drop=ar.querySelector(`#${cdid}`);
     wireAc(inp,drop,name=>addSuggestion(di,name,mealType),()=>addSuggestion(di,null,mealType));
     ar.querySelector('[data-role="add"]').addEventListener('click',e=>{addSuggestion(+e.target.dataset.di,null,e.target.dataset.mt);drop.hidden=true;});
