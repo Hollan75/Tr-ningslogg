@@ -394,11 +394,9 @@ async function init() {
   chip.textContent=isOwner?'Förälder':'Barn';
   chip.className='chip '+(isOwner?'chip-p':'chip-c');
 
-  if (isOwner) {
-    document.getElementById('week-nav').hidden=false;
-    document.getElementById('prev-w').addEventListener('click',()=>changeWeek(-7));
-    document.getElementById('next-w').addEventListener('click',()=>changeWeek(7));
-  }
+  document.getElementById('week-nav').hidden=false;
+  document.getElementById('prev-w').addEventListener('click',()=>changeWeek(-7));
+  document.getElementById('next-w').addEventListener('click',()=>changeWeek(7));
 
   // Library subscription (all roles can see, parent can manage)
   libUnsub=db.collection('library').onSnapshot(snap=>{
@@ -444,6 +442,11 @@ function updateWeekLabel() {
   const lbl=`Vecka ${weekNum(mon)} · ${svDate(weekStart)}–${svDate(isoDate(addDays(mon,6)))}`;
   document.getElementById('wnav-lbl').textContent=lbl;
   document.getElementById('hdr-sub').textContent=lbl;
+  // Children can't go back before current week
+  if (!isOwner) {
+    const cur=isoDate(getWednesday(new Date()));
+    document.getElementById('prev-w').disabled=weekStart<=cur;
+  }
 }
 
 function changeWeek(delta) {
