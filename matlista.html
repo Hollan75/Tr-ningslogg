@@ -117,7 +117,7 @@ button{cursor:pointer;font-family:inherit;transition:.12s all}
 .dbtn{width:26px;height:26px;border:none;background:none;color:var(--t2);font-size:.72rem;border-radius:5px;flex-shrink:0}
 .dbtn:hover{color:var(--rd)}
 
-.ar{display:flex;gap:7px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--bd)}
+.ar{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--bd)}
 .ar-inp{
   flex:1;min-width:0;background:var(--s2);border:1px solid var(--bd);
   border-radius:7px;padding:7px 10px;font-size:.84rem;font-family:inherit;color:var(--t1);
@@ -197,7 +197,7 @@ button{cursor:pointer;font-family:inherit;transition:.12s all}
 }
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
-.ac-wrap{flex:1;min-width:0;position:relative}
+.ac-wrap{flex:1 1 140px;min-width:0;position:relative}
 .ac-drop{
   position:absolute;top:calc(100% + 3px);left:0;right:0;z-index:100;
   background:var(--s1);border:1px solid var(--bd);border-radius:8px;
