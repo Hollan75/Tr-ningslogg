@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { COLORS, RADIUS } from '../theme';
-import { getStats, getSessions, getTemplates, getActiveSession } from '../database';
+import { getStats, getSessions, getTemplates, getActiveSession, deleteTemplate } from '../database';
 import ResumeBanner from '../components/ResumeBanner';
 import { openWorkout, startWorkout } from '../utils/workout';
 import { durationMin, fmtRelativeDate } from '../utils/format';
@@ -65,6 +66,24 @@ export default function HomeScreen() {
   }
 
   useFocusEffect(useCallback(() => { load(); }, []));
+
+  function confirmDelete(t: WorkoutTemplate) {
+    Alert.alert('Ta bort pass', `Vill du ta bort "${t.name}"? Historiken behålls.`, [
+      { text: 'Avbryt', style: 'cancel' },
+      {
+        text: 'Ta bort',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteTemplate(t.id);
+            await load();
+          } catch (err) {
+            Alert.alert('Kunde inte ta bort', err instanceof Error ? err.message : String(err));
+          }
+        },
+      },
+    ]);
+  }
 
   async function onRefresh() {
     setRefreshing(true);
@@ -137,6 +156,16 @@ export default function HomeScreen() {
                 {t.last_used ? ` · senast ${fmtRelativeDate(t.last_used).toLowerCase()}` : ''}
               </Text>
             </View>
+            <TouchableOpacity
+              style={s.tplAction}
+              onPress={() => navigation.navigate('CreateTemplate', { templateId: t.id })}
+              hitSlop={4}
+            >
+              <Ionicons name="create-outline" size={18} color={COLORS.accent} />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.tplAction} onPress={() => confirmDelete(t)} hitSlop={4}>
+              <Ionicons name="trash-outline" size={18} color={COLORS.danger} />
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => startWorkout(navigation, t.id, t.name)} hitSlop={8}>
               <Ionicons name="play-circle" size={34} color={COLORS.accent} />
             </TouchableOpacity>
@@ -271,6 +300,14 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   tplName: { color: COLORS.text, fontWeight: '700', fontSize: 15 },
+  tplAction: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.surface2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   tplMeta: { color: COLORS.textMuted, fontSize: 12, marginTop: 2 },
 
   quickRow: { flexDirection: 'row', gap: 8, marginBottom: 28 },
