@@ -310,6 +310,20 @@ export async function getExerciseById(id: string): Promise<Exercise | null> {
   return db.getFirstAsync<Exercise>('SELECT * FROM exercises WHERE id = ?', [id]);
 }
 
+// A library exercise with the same name that has instructions – used when an own
+// exercise was created with the same name as one that exists in the library
+export async function getLibraryTwin(exercise: Exercise): Promise<Exercise | null> {
+  const db = await getDb();
+  return db.getFirstAsync<Exercise>(
+    `SELECT * FROM exercises
+     WHERE lower(trim(name)) = lower(trim(?)) AND id != ? AND id NOT LIKE 'custom_%'
+       AND instructions IS NOT NULL AND instructions != ''
+     ORDER BY CASE WHEN id LIKE 'se_%' THEN 0 ELSE 1 END
+     LIMIT 1`,
+    [exercise.name, exercise.id]
+  );
+}
+
 export async function getBodyParts(library: ExerciseLibrary = 'all'): Promise<string[]> {
   const db = await getDb();
   const lib = libraryCondition(library);

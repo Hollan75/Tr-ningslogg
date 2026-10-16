@@ -1,20 +1,32 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
 
 import { COLORS, RADIUS } from '../theme';
 import ExerciseHistoryList from './ExerciseHistoryList';
 import { parseMuscles } from '../utils/format';
+import { getLibraryTwin } from '../database';
 import type { Exercise } from '../types';
 
 // Name, tags, instructions, muscles and the user's history for one exercise
 export default function ExerciseInfo({ exercise }: { exercise: Exercise }) {
   const isCustom = exercise.id.startsWith('custom_');
   const isSwedish = exercise.id.startsWith('se_');
-  const primary = parseMuscles(exercise.primaryMuscles);
-  const secondary = parseMuscles(exercise.secondaryMuscles);
-  const instructions = exercise.instructions
-    ? exercise.instructions.split(';').map(i => i.trim()).filter(Boolean)
-    : [];
+  const ownSteps = splitSteps(exercise.instructions);
+
+  // Own exercises without instructions borrow them from a library exercise with the same name
+  const [twin, setTwin] = useState<Exercise | null>(null);
+  useEffect(() => {
+    setTwin(null);
+    if (ownSteps.length > 0) return;
+    getLibraryTwin(exercise).then(setTwin).catch(() => undefined);
+  }, [exercise.id]);
+
+  const instructions = ownSteps.length > 0 ? ownSteps : splitSteps(twin?.instructions);
+  const ownPrimary = parseMuscles(exercise.primaryMuscles);
+  const ownSecondary = parseMuscles(exercise.secondaryMuscles);
+  const useTwinMuscles = ownPrimary.length === 0 && ownSecondary.length === 0 && twin != null;
+  const primary = useTwinMuscles ? parseMuscles(twin.primaryMuscles) : ownPrimary;
+  const secondary = useTwinMuscles ? parseMuscles(twin.secondaryMuscles) : ownSecondary;
 
   return (
     <View>
@@ -31,7 +43,7 @@ export default function ExerciseInfo({ exercise }: { exercise: Exercise }) {
         {exercise.difficulty ? <Tag label={exercise.difficulty} /> : null}
       </View>
 
-      {instructions.length > 0 && (
+      {instructions.length > 0 ? (
         <InfoBlock title="Så gör du">
           {instructions.map((step, i) => (
             <View key={i} style={s.stepRow}>
@@ -41,6 +53,13 @@ export default function ExerciseInfo({ exercise }: { exercise: Exercise }) {
               <Text style={s.stepText}>{step}</Text>
             </View>
           ))}
+        </InfoBlock>
+      ) : (
+        <InfoBlock title="Så gör du">
+          <Text style={s.emptyText}>
+            Ingen instruktion finns för den här övningen.
+            {isCustom ? ' Du kan lägga till en genom att redigera övningen under fliken Övningar.' : ''}
+          </Text>
         </InfoBlock>
       )}
 
@@ -66,6 +85,10 @@ export default function ExerciseInfo({ exercise }: { exercise: Exercise }) {
       </InfoBlock>
     </View>
   );
+}
+
+function splitSteps(text: string | null | undefined): string[] {
+  return text ? text.split(';').map(i => i.trim()).filter(Boolean) : [];
 }
 
 function Tag({ label, color }: { label: string; color?: string }) {
@@ -130,4 +153,5 @@ const s = StyleSheet.create({
   },
   stepNumText: { color: COLORS.accent, fontSize: 11, fontWeight: '700' },
   stepText: { flex: 1, color: COLORS.text, fontSize: 14, lineHeight: 20 },
+  emptyText: { color: COLORS.textMuted, fontSize: 14, lineHeight: 20 },
 });
