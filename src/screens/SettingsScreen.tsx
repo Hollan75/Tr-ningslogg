@@ -23,6 +23,7 @@ import {
 } from '../database';
 import { ensureExerciseLibraries } from '../data/seed';
 import ImportTemplatesModal from '../components/ImportTemplatesModal';
+import { APP_VERSION } from '../version';
 import {
   loadRestSettings,
   saveRestSettings,
@@ -283,7 +284,7 @@ export default function SettingsScreen() {
             <Ionicons name="information-circle-outline" size={20} color={COLORS.textMuted} />
             <View style={s.infoText}>
               <Text style={s.infoTitle}>Träningslogg</Text>
-              <Text style={s.infoSub}>Version 1.0.0 · Lokalt lagrad data</Text>
+              <Text style={s.infoSub}>Version {APP_VERSION} · Lokalt lagrad data</Text>
             </View>
           </View>
         </View>
