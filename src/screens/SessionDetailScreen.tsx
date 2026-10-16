@@ -143,7 +143,14 @@ export default function SessionDetailScreen() {
         ) : (
           groups.map(group => (
             <View key={group.exerciseId} style={s.exBlock}>
-              <Text style={s.exName}>{group.name}</Text>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('ExerciseDetail', { exerciseId: group.exerciseId })}
+              >
+                <Text style={s.exName}>
+                  {group.name}{' '}
+                  <Ionicons name="information-circle-outline" size={15} color={COLORS.accent} />
+                </Text>
+              </TouchableOpacity>
               <View style={s.setsHeader}>
                 <Text style={[s.col, s.colNum]}>Set</Text>
                 <Text style={[s.col, s.colVal]}>Reps/tid</Text>

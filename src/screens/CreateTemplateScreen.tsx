@@ -251,12 +251,18 @@ export default function CreateTemplateScreen() {
                   <View style={s.exIndex}>
                     <Text style={s.exIndexText}>{idx + 1}</Text>
                   </View>
-                  <View style={s.exInfo}>
-                    <Text style={s.exName}>{ex.name}</Text>
+                  <TouchableOpacity
+                    style={s.exInfo}
+                    onPress={() => navigation.navigate('ExerciseDetail', { exerciseId: ex.exerciseId })}
+                  >
+                    <Text style={s.exName}>
+                      {ex.name}{' '}
+                      <Ionicons name="information-circle-outline" size={15} color={COLORS.accent} />
+                    </Text>
                     <Text style={s.exMeta}>
                       {ex.lastTime ? `Förra gången: ${ex.lastTime}` : ex.bodyPart ?? ''}
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                   <TouchableOpacity onPress={() => move(idx, -1)} disabled={idx === 0} style={s.smallBtn}>
                     <Ionicons name="chevron-up" size={16} color={idx === 0 ? COLORS.border : COLORS.textMuted} />
                   </TouchableOpacity>
