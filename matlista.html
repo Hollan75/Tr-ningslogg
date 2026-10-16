@@ -234,6 +234,17 @@ button{cursor:pointer;font-family:inherit;transition:.12s all}
 .star-btn{background:none;border:none;font-size:.88rem;color:var(--bd);padding:2px 1px;line-height:1;cursor:pointer;transition:.08s color}
 .star-btn:hover,.star-btn.on{color:var(--am)}
 .mi-avg{font-size:.64rem;color:var(--t2);margin-left:5px}
+.mi-vc{cursor:pointer}
+.mi-vc:hover{opacity:.8}
+
+/* voter detail expand */
+.mi-detail{flex:0 0 100%;padding:4px 0 3px 34px;display:flex;flex-direction:column;gap:4px}
+.mi-detail-row{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.mi-detail-lbl{font-size:.64rem;color:var(--t2);white-space:nowrap}
+.mi-detail-chip{font-size:.64rem;padding:2px 7px;border-radius:20px}
+.mi-detail-up{background:var(--gn-d);color:var(--gn)}
+.mi-detail-dn{background:var(--rd-d);color:var(--rd)}
+.mi-detail-st{background:var(--am-d);color:var(--am)}
 
 /* wishlist */
 .wl-item{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bd)}
@@ -356,6 +367,7 @@ let movingMeal=null;  // {di, id} or null
 let allRatings={};  // { userId: { ratings: { slug: score } } }
 let ratingsUnsub=null;
 let schedulingWish=null;  // wishId being scheduled by parent, or null
+let detailMeal=null;     // mealId whose voter detail is expanded in parent view
 
 // ── TOAST ──────────────────────────────────────────────────────────────
 let toastT;
@@ -452,7 +464,7 @@ function updateWeekLabel() {
 
 function changeWeek(delta) {
   const mon=new Date(weekStart+'T12:00:00'); mon.setDate(mon.getDate()+delta);
-  weekStart=isoDate(mon); openSugPanel=null; openSugType='middag'; movingMeal=null; schedulingWish=null; subscribeWeek();
+  weekStart=isoDate(mon); openSugPanel=null; openSugType='middag'; movingMeal=null; schedulingWish=null; detailMeal=null; subscribeWeek();
 }
 
 // ── DERIVED ────────────────────────────────────────────────────────────
@@ -516,6 +528,73 @@ async function scheduleWish(di,wishName) {
   await addMeal(di,wishName,'middag');
   schedulingWish=null;
   toast(`"${wishName}" lagd på ${DAYS[di]}`);
+}
+
+function findSugOwner(sugId) {
+  for (const [uid,v] of Object.entries(allVotes)) {
+    const sugsForWeek=v[wk()]?.suggestions??{};
+    for (const ds of Object.values(sugsForWeek)) {
+      if (ds.some(s=>s.id===sugId)) return uid;
+    }
+  }
+  return null;
+}
+async function deleteSuggestion(di,sugId) {
+  const uid=findSugOwner(sugId); if(!uid) return;
+  const ex=allVotes[uid]??{}, exw=ex[wk()]??{};
+  const exs=exw.suggestions??{};
+  const ds=(exs[di]??[]).filter(s=>s.id!==sugId);
+  try {
+    await db.collection('votes').doc(uid).set({...ex,[wk()]:{...exw,suggestions:{...exs,[di]:ds}}});
+  } catch{toast('Fel');}
+}
+
+function mkMealDetail(meal) {
+  const slug=mealSlug(meal.name);
+  const div=document.createElement('div'); div.className='mi-detail';
+  // Up/down voters
+  const uppers=Object.entries(allVotes)
+    .filter(([,v])=>!!(v[wk()]?.picks?.[meal.id]))
+    .map(([,v])=>v.name||'Barn');
+  const downers=Object.entries(allVotes)
+    .filter(([,v])=>!!(v[wk()]?.downs?.[meal.id]))
+    .map(([,v])=>v.name||'Barn');
+  // Star ratings
+  const raters=Object.entries(allRatings)
+    .map(([uid,u])=>({name:(allVotes[uid]?.name||(uid===myId?'Du':'Barn')),score:u?.ratings?.[slug]??0}))
+    .filter(r=>r.score>0).sort((a,b)=>b.score-a.score);
+
+  if(uppers.length){
+    const row=document.createElement('div'); row.className='mi-detail-row';
+    const lbl=document.createElement('span'); lbl.className='mi-detail-lbl'; lbl.textContent='Gillar:';
+    row.appendChild(lbl);
+    uppers.forEach(n=>{const c=document.createElement('span');c.className='mi-detail-chip mi-detail-up';c.textContent=n;row.appendChild(c);});
+    div.appendChild(row);
+  }
+  if(downers.length){
+    const row=document.createElement('div'); row.className='mi-detail-row';
+    const lbl=document.createElement('span'); lbl.className='mi-detail-lbl'; lbl.textContent='Gillar inte:';
+    row.appendChild(lbl);
+    downers.forEach(n=>{const c=document.createElement('span');c.className='mi-detail-chip mi-detail-dn';c.textContent=n;row.appendChild(c);});
+    div.appendChild(row);
+  }
+  if(raters.length){
+    const row=document.createElement('div'); row.className='mi-detail-row';
+    const lbl=document.createElement('span'); lbl.className='mi-detail-lbl'; lbl.textContent='Betyg:';
+    row.appendChild(lbl);
+    raters.forEach(r=>{
+      const c=document.createElement('span');c.className='mi-detail-chip mi-detail-st';
+      c.textContent=`${r.name} ${'★'.repeat(r.score)}`;
+      row.appendChild(c);
+    });
+    div.appendChild(row);
+  }
+  if(!uppers.length&&!downers.length&&!raters.length){
+    const row=document.createElement('div'); row.className='mi-detail-row';
+    const lbl=document.createElement('span'); lbl.className='mi-detail-lbl'; lbl.textContent='Inga röster eller betyg ännu';
+    row.appendChild(lbl); div.appendChild(row);
+  }
+  return div;
 }
 
 // ── RATINGS ────────────────────────────────────────────────────────────
@@ -598,19 +677,15 @@ function appendMealSection(body,di,base,sugs,mealType,isParent,showLabel) {
   if (isParent) {
     if (!bm.length&&!sm.length) ul.innerHTML=`<li style="font-size:.8rem;color:var(--t2);padding:6px 0;font-style:italic">Inga rätter ännu</li>`;
     bm.forEach(meal=>{
-      const vc=voteCount(meal.id); const vn=voterNames(meal.id);
+      const vc=voteCount(meal.id);
       const isMoving=movingMeal?.di===di&&movingMeal?.id===meal.id;
+      const expanded=detailMeal===meal.id;
       const li=document.createElement('li'); li.className='mi';
       li.innerHTML=`
         <button class="mbtn${isMoving?' on':''}" data-di="${di}" data-id="${meal.id}" title="Flytta">⇄</button>
         <span class="mi-name">${esc(meal.name)}</span>
-        ${vc>0?`<span class="mi-vc">${vc} ✓</span>`:''}
+        ${vc>0?`<span class="mi-vc" data-id="${meal.id}" title="Klicka för detaljer" style="cursor:pointer">${vc} ✓</span>`:'<span class="mi-vc" data-id="'+meal.id+'" title="Klicka för detaljer" style="cursor:pointer;opacity:.4;font-size:.66rem;color:var(--t2)">ℹ</span>'}
         <button class="dbtn" data-di="${di}" data-id="${meal.id}" title="Ta bort">✕</button>`;
-      if (vn.length) {
-        const vrow=document.createElement('div'); vrow.className='mi-voters';
-        vn.forEach(n=>{const c=document.createElement('span');c.className='mi-voter';c.textContent=n;vrow.appendChild(c);});
-        li.appendChild(vrow);
-      }
       if (isMoving) {
         const picker=document.createElement('div'); picker.className='move-picker';
         DAYS.forEach((dname,tdi)=>{
@@ -622,21 +697,24 @@ function appendMealSection(body,di,base,sugs,mealType,isParent,showLabel) {
         li.appendChild(picker);
       }
       li.appendChild(mkStarsRow(meal));
+      if(expanded) li.appendChild(mkMealDetail(meal));
+      li.querySelector('.mi-vc')
+        ?.addEventListener('click',()=>{detailMeal=detailMeal===meal.id?null:meal.id;render();});
       ul.appendChild(li);
     });
     sm.forEach(sug=>{
-      const vc=voteCount(sug.id); const vn=voterNames(sug.id);
+      const vc=voteCount(sug.id);
+      const expanded=detailMeal===sug.id;
       const li=document.createElement('li'); li.className='mi';
       li.innerHTML=`<span style="font-size:.62rem;color:var(--t2);flex-shrink:0">↳</span>
         <span class="mi-name">${esc(sug.name)}</span>
         <span class="mi-by">${esc(sug.by)}</span>
-        ${vc>0?`<span class="mi-vc">${vc} ✓</span>`:''}`;
-      if (vn.length) {
-        const vrow=document.createElement('div'); vrow.className='mi-voters';
-        vn.forEach(n=>{const c=document.createElement('span');c.className='mi-voter';c.textContent=n;vrow.appendChild(c);});
-        li.appendChild(vrow);
-      }
+        ${vc>0?`<span class="mi-vc" data-sid="${sug.id}" style="cursor:pointer" title="Klicka för detaljer">${vc} ✓</span>`:''}
+        <button class="dbtn" data-di="${di}" data-sid="${sug.id}" title="Ta bort förslag">✕</button>`;
+      li.querySelector('.dbtn[data-di]').addEventListener('click',e=>deleteSuggestion(+e.target.dataset.di, sug.id));
+      if(vc>0) li.querySelector(`[data-sid="${sug.id}"].mi-vc`)?.addEventListener('click',()=>{detailMeal=detailMeal===sug.id?null:sug.id;render();});
       li.appendChild(mkStarsRow(sug));
+      if(expanded) li.appendChild(mkMealDetail(sug));
       ul.appendChild(li);
     });
   } else {
@@ -758,6 +836,21 @@ function mkChildWishCard() {
   inp.addEventListener('keydown',e=>{if(e.key==='Enter'){addWish(null);drop.hidden=true;}});
   ar.querySelector('#wish-add').addEventListener('click',()=>addWish(null));
   body.appendChild(ar);
+  // Bulk add via textarea
+  const bulk=document.createElement('div'); bulk.className='spp-sec';
+  bulk.style.marginTop='8px';
+  bulk.innerHTML=`<div style="font-size:.68rem;color:var(--t2);margin-bottom:4px">Eller skriv flera rätter, en per rad:</div>
+    <textarea class="spp-inp spp-ta" id="wish-bulk" placeholder="Tacos&#10;Pannkakor&#10;Hamburgare" style="min-height:60px"></textarea>
+    <button class="btn btn-g btn-sm" id="wish-bulk-add" style="margin-top:5px">Lägg till alla</button>`;
+  bulk.querySelector('#wish-bulk-add').addEventListener('click',async()=>{
+    const ta=bulk.querySelector('#wish-bulk');
+    const lines=ta.value.split('\n').map(l=>l.trim()).filter(Boolean);
+    if(!lines.length)return;
+    ta.value='';
+    for(const name of lines) await addWish(name);
+    toast(`${lines.length} önskemål tillagda`);
+  });
+  body.appendChild(bulk);
   return card;
 }
 
