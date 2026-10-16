@@ -17,7 +17,7 @@ import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { COLORS, RADIUS } from '../theme';
-import { getTemplateById, getTemplateExercises, saveTemplate, getPreviousPerformance } from '../database';
+import { getTemplateById, getTemplateExercises, saveTemplate, getPreviousPerformance, deleteTemplate } from '../database';
 import ExercisePicker from '../components/ExercisePicker';
 import { fmtSet, parseNum } from '../utils/format';
 import type { Exercise } from '../types';
@@ -185,6 +185,26 @@ export default function CreateTemplateScreen() {
     }
   }
 
+  function handleDelete() {
+    if (!templateId) return;
+    Alert.alert('Ta bort pass', `Vill du ta bort "${name.trim() || 'passet'}"? Historiken behålls.`, [
+      { text: 'Avbryt', style: 'cancel' },
+      {
+        text: 'Ta bort',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteTemplate(templateId);
+            saved.current = true; // skip the unsaved-changes warning
+            navigation.goBack();
+          } catch (err) {
+            Alert.alert('Kunde inte ta bort', err instanceof Error ? err.message : String(err));
+          }
+        },
+      },
+    ]);
+  }
+
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.navbar}>
@@ -295,6 +315,13 @@ export default function CreateTemplateScreen() {
               <Ionicons name="add-circle-outline" size={20} color={COLORS.accent} />
               <Text style={s.addText}>Lägg till övning</Text>
             </TouchableOpacity>
+
+            {templateId ? (
+              <TouchableOpacity style={s.deleteBtn} onPress={handleDelete}>
+                <Ionicons name="trash-outline" size={18} color={COLORS.danger} />
+                <Text style={s.deleteText}>Ta bort passet</Text>
+              </TouchableOpacity>
+            ) : null}
           </KeyboardAwareScrollView>
       )}
 
@@ -339,6 +366,18 @@ function ConfigField({
 }
 
 const s = StyleSheet.create({
+  deleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 28,
+    padding: 14,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.dangerDim,
+  },
+  deleteText: { color: COLORS.danger, fontWeight: '600', fontSize: 15 },
   safe: { flex: 1, backgroundColor: COLORS.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   navbar: {

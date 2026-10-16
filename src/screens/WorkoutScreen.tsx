@@ -34,32 +34,32 @@ export default function WorkoutScreen() {
     }, [])
   );
 
-  function handleTemplateMenu(template: WorkoutTemplate) {
-    Alert.alert(template.name, undefined, [
-      {
-        text: 'Redigera',
-        onPress: () => navigation.navigate('CreateTemplate', { templateId: template.id }),
-      },
+  function editTemplate(template: WorkoutTemplate) {
+    navigation.navigate('CreateTemplate', { templateId: template.id });
+  }
+
+  function confirmDelete(template: WorkoutTemplate) {
+    Alert.alert('Ta bort pass', `Vill du ta bort "${template.name}"? Historiken behålls.`, [
+      { text: 'Avbryt', style: 'cancel' },
       {
         text: 'Ta bort',
         style: 'destructive',
-        onPress: () =>
-          Alert.alert('Ta bort pass', `Vill du ta bort "${template.name}"? Historiken behålls.`, [
-            { text: 'Avbryt', style: 'cancel' },
-            {
-              text: 'Ta bort',
-              style: 'destructive',
-              onPress: async () => {
-                try {
-                  await deleteTemplate(template.id);
-                  setTemplates(prev => prev.filter(t => t.id !== template.id));
-                } catch (err) {
-                  Alert.alert('Kunde inte ta bort', err instanceof Error ? err.message : String(err));
-                }
-              },
-            },
-          ]),
+        onPress: async () => {
+          try {
+            await deleteTemplate(template.id);
+            setTemplates(prev => prev.filter(t => t.id !== template.id));
+          } catch (err) {
+            Alert.alert('Kunde inte ta bort', err instanceof Error ? err.message : String(err));
+          }
+        },
       },
+    ]);
+  }
+
+  function handleTemplateMenu(template: WorkoutTemplate) {
+    Alert.alert(template.name, undefined, [
+      { text: 'Redigera', onPress: () => editTemplate(template) },
+      { text: 'Ta bort', style: 'destructive', onPress: () => confirmDelete(template) },
       { text: 'Stäng', style: 'cancel' },
     ]);
   }
@@ -123,8 +123,11 @@ export default function WorkoutScreen() {
             >
               <View style={s.cardTop}>
                 <Text style={s.cardName} numberOfLines={1}>{template.name}</Text>
-                <TouchableOpacity onPress={() => handleTemplateMenu(template)} hitSlop={10}>
-                  <Ionicons name="ellipsis-horizontal" size={20} color={COLORS.textMuted} />
+                <TouchableOpacity style={s.cardIcon} onPress={() => editTemplate(template)} hitSlop={6}>
+                  <Ionicons name="create-outline" size={18} color={COLORS.accent} />
+                </TouchableOpacity>
+                <TouchableOpacity style={s.cardIcon} onPress={() => confirmDelete(template)} hitSlop={6}>
+                  <Ionicons name="trash-outline" size={18} color={COLORS.danger} />
                 </TouchableOpacity>
               </View>
               {template.exercise_names ? (
@@ -213,8 +216,16 @@ const s = StyleSheet.create({
     padding: 16,
     marginBottom: 10,
   },
-  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   cardName: { flex: 1, color: COLORS.text, fontWeight: '800', fontSize: 17 },
+  cardIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: COLORS.surface2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   cardExercises: { color: COLORS.textMuted, fontSize: 13, marginTop: 6, lineHeight: 18 },
   cardBottom: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
   cardMeta: { flex: 1, color: COLORS.textMuted, fontSize: 12 },
