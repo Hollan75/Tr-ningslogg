@@ -644,16 +644,13 @@ function appendMealSection(body,di,base,sugs,mealType,isParent,showLabel) {
     if (!allM.length) ul.innerHTML=`<li style="font-size:.8rem;color:var(--t2);padding:6px 0;font-style:italic">Inga förslag ännu</li>`;
     allM.forEach(meal=>{
       const voted=iVoted(meal.id),downed=iDownvoted(meal.id);
-      const vc=voteCount(meal.id),dc=downCount(meal.id);
       const li=document.createElement('li'); li.className='mi';
       li.style.opacity=(downed&&!voted)?'.55':'1';
       li.innerHTML=`
-        <button class="vbtn${voted?' on':''}" data-di="${di}" data-id="${meal.id}" title="Rösta upp">✓</button>
+        <button class="vbtn${voted?' on':''}" data-di="${di}" data-id="${meal.id}" title="Jag vill ha!">✓</button>
         <span class="mi-name">${esc(meal.name)}</span>
         ${meal.by&&meal.by!=='Papa'?`<span class="mi-by">${esc(meal.by)}</span>`:''}
-        ${vc>0?`<span class="mi-vc">${vc}</span>`:''}
-        ${dc>0?`<span class="mi-vd">–${dc}</span>`:''}
-        <button class="vbtn-d${downed?' on':''}" data-di="${di}" data-id="${meal.id}" title="Rösta ner">–</button>`;
+        <button class="vbtn-d${downed?' on':''}" data-di="${di}" data-id="${meal.id}" title="Vill inte ha">✕</button>`;
       li.appendChild(mkStarsRow(meal));
       ul.appendChild(li);
     });
