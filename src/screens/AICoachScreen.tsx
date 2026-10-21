@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
 import { COLORS, RADIUS } from '../theme';
-import { getSessions, getSessionSets, getAllExerciseNames } from '../database';
+import { getSessions, getSessionSets, getAllExerciseNames, getTemplates } from '../database';
 import { sendToClaude } from '../api/claude';
 import type { ChatMessage } from '../api/claude';
 import { PROFILES, PROFILE_NAMES } from '../data/profiles';
@@ -255,9 +255,17 @@ export default function AICoachScreen() {
         res.updated.length ? `Uppdaterade (samma namn fanns): ${res.updated.join(', ')}` : '',
         res.newExercises.length ? `Nya egna övningar: ${res.newExercises.join(', ')}` : '',
       ].filter(Boolean);
-      Alert.alert('Sparat', `${lines.join('\n\n')}\n\nDu hittar passen under Träna → Mina pass.`, [
+      // One workout → offer to open it for editing right away
+      const saved = [...res.created, ...res.updated];
+      const tpl = saved.length === 1 ? (await getTemplates()).find(t => t.name === saved[0]) : undefined;
+      Alert.alert('Sparat', `${lines.join('\n\n')}\n\nDu kan ändra passet under Träna → Mina pass (✏️).`, [
         { text: 'OK' },
-        { text: 'Visa pass', onPress: () => navigation.navigate('WorkoutTab' as never) },
+        tpl
+          ? {
+              text: 'Redigera passet',
+              onPress: () => (navigation as any).navigate('CreateTemplate', { templateId: tpl.id }),
+            }
+          : { text: 'Visa pass', onPress: () => navigation.navigate('WorkoutTab' as never) },
       ]);
     } catch (err) {
       Alert.alert('Kunde inte spara passet', err instanceof Error ? err.message : String(err));
