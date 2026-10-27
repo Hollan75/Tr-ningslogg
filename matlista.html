@@ -254,6 +254,7 @@ button{cursor:pointer;font-family:inherit;transition:.12s all}
 .wl-item:last-child{border-bottom:none}
 .wl-name{flex:1;font-size:.86rem;min-width:0}
 .wl-by{font-size:.68rem;color:var(--t2);white-space:nowrap}
+.wl-day-hint{font-size:.66rem;padding:2px 7px;border-radius:20px;background:var(--am-d);color:var(--am);white-space:nowrap}
 .wl-del{background:none;border:none;color:var(--t2);font-size:.72rem;padding:3px 5px;border-radius:5px}
 .wl-del:hover{color:var(--rd)}
 .wl-sched{font-size:.7rem;font-weight:600;padding:3px 10px;border-radius:20px;
@@ -517,8 +518,23 @@ function getAllWishes() {
   const result=[];
   Object.entries(allVotes).forEach(([uid,v])=>{
     (v.wishlist??[]).forEach(w=>result.push({...w,by:v.name||'Barn',userId:uid}));
+    // Also include per-day suggestions this week
+    const sugsForWeek=v[wk()]?.suggestions??{};
+    Object.entries(sugsForWeek).forEach(([diStr,ds])=>{
+      ds.forEach(s=>result.push({...s,by:v.name||'Barn',userId:uid,isSug:true,sugDi:+diStr}));
+    });
   });
   return result;
+}
+async function deleteWishById(wishId) {
+  for (const [uid,v] of Object.entries(allVotes)) {
+    if ((v.wishlist??[]).some(w=>w.id===wishId)) {
+      const newWl=(v.wishlist??[]).filter(w=>w.id!==wishId);
+      try { await db.collection('votes').doc(uid).set({...v,wishlist:newWl}); }
+      catch { toast('Fel'); }
+      return;
+    }
+  }
 }
 async function addWish(nameOverride) {
   if(!myId){toast('Inte inloggad');return;}
@@ -690,7 +706,7 @@ function appendMealSection(body,di,base,sugs,mealType,isParent,showLabel) {
   }
   const ul=document.createElement('ul'); ul.className='ml';
   if (isParent) {
-    if (!bm.length&&!sm.length) ul.innerHTML=`<li style="font-size:.8rem;color:var(--t2);padding:6px 0;font-style:italic">Inga rätter ännu</li>`;
+    if (!bm.length) ul.innerHTML=`<li style="font-size:.8rem;color:var(--t2);padding:6px 0;font-style:italic">Inga rätter ännu</li>`;
     bm.forEach(meal=>{
       const vc=voteCount(meal.id);
       const isMoving=movingMeal?.di===di&&movingMeal?.id===meal.id;
@@ -717,21 +733,7 @@ function appendMealSection(body,di,base,sugs,mealType,isParent,showLabel) {
         ?.addEventListener('click',()=>{detailMeal=detailMeal===meal.id?null:meal.id;render();});
       ul.appendChild(li);
     });
-    sm.forEach(sug=>{
-      const vc=voteCount(sug.id);
-      const expanded=detailMeal===sug.id;
-      const li=document.createElement('li'); li.className='mi';
-      li.innerHTML=`<span style="font-size:.62rem;color:var(--t2);flex-shrink:0">↳</span>
-        <span class="mi-name">${esc(sug.name)}</span>
-        <span class="mi-by">${esc(sug.by)}</span>
-        ${vc>0?`<span class="mi-vc" data-sid="${sug.id}" style="cursor:pointer" title="Klicka för detaljer">${vc} ✓</span>`:''}
-        <button class="dbtn" data-di="${di}" data-sid="${sug.id}" title="Ta bort förslag">✕</button>`;
-      li.querySelector('.dbtn[data-di]').addEventListener('click',e=>deleteSuggestion(+e.target.dataset.di, sug.id));
-      if(vc>0) li.querySelector(`[data-sid="${sug.id}"].mi-vc`)?.addEventListener('click',()=>{detailMeal=detailMeal===sug.id?null:sug.id;render();});
-      li.appendChild(mkStarsRow(sug));
-      if(expanded) li.appendChild(mkMealDetail(sug));
-      ul.appendChild(li);
-    });
+    // Child suggestions are shown in "Barnens önskemål" below, not here
   } else {
     const allM=[...bm,...sm].sort((a,b)=>{const sa=netScore(a.id),sb=netScore(b.id);return sb!==sa?sb-sa:0;});
     if (!allM.length) ul.innerHTML=`<li style="font-size:.8rem;color:var(--t2);padding:6px 0;font-style:italic">Inga förslag ännu</li>`;
@@ -891,10 +893,14 @@ function mkParentWishCard() {
     const isScheducing=schedulingWish===w.id;
     const li=document.createElement('li'); li.className='wl-item'; li.style.flexWrap='wrap';
     li.innerHTML=`<span class="wl-name">${esc(w.name)}</span>
+      ${w.isSug?`<span class="wl-day-hint" title="Ville ha till ${esc(DAYS[w.sugDi])}">${esc(DAYS[w.sugDi].slice(0,3))}</span>`:''}
+      <button class="wl-del" title="Ta bort">✕</button>
       <button class="wl-sched${isScheducing?' on':''}" data-id="${w.id}">
         ${isScheducing?'Välj dag ↓':'Schemalägg →'}
       </button>`;
     li.insertBefore(mkPersonDot(w.userId, w.by), li.firstChild);
+    li.querySelector('.wl-del').addEventListener('click',
+      w.isSug ? ()=>deleteSuggestion(w.sugDi,w.id) : ()=>deleteWishById(w.id));
     li.querySelector('.wl-sched').addEventListener('click',()=>{
       schedulingWish=schedulingWish===w.id?null:w.id; render();
     });
