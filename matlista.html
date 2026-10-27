@@ -246,6 +246,9 @@ button{cursor:pointer;font-family:inherit;transition:.12s all}
 .mi-detail-dn{background:var(--rd-d);color:var(--rd)}
 .mi-detail-st{background:var(--am-d);color:var(--am)}
 
+/* person dot */
+.person-dot{width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:700;color:#fff;flex-shrink:0;text-transform:uppercase}
+
 /* wishlist */
 .wl-item{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bd)}
 .wl-item:last-child{border-bottom:none}
@@ -308,6 +311,18 @@ const MEALS = [
 ];
 
 // ── HELPERS ────────────────────────────────────────────────────────────
+const PERSON_COLORS=['#4a6cf7','#e0455e','#2cb67d','#f5a623','#9b6fd8','#5ab4e8'];
+function personColor(uid) {
+  let h=0; for(let i=0;i<uid.length;i++) h=(h*31+uid.charCodeAt(i))&0x7fffffff;
+  return PERSON_COLORS[h%PERSON_COLORS.length];
+}
+function mkPersonDot(userId,name) {
+  const el=document.createElement('span'); el.className='person-dot';
+  el.style.background=personColor(userId);
+  el.title=name||'Barn';
+  el.textContent=(name||'?').charAt(0).toUpperCase();
+  return el;
+}
 function uid()  { return Math.random().toString(36).slice(2,9) }
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
@@ -734,10 +749,12 @@ function appendMealSection(body,di,base,sugs,mealType,isParent,showLabel) {
     });
   }
   body.appendChild(ul);
-  body.appendChild(mkAddRow(di,isParent,mealType));
-  const sp=document.createElement('div'); sp.id=`sp-${di}-${mealType}`;
-  if (openSugPanel===di&&openSugType===mealType) sp.appendChild(buildSugPanel(di,isParent,mealType));
-  body.appendChild(sp);
+  if (isParent) {
+    body.appendChild(mkAddRow(di,isParent,mealType));
+    const sp=document.createElement('div'); sp.id=`sp-${di}-${mealType}`;
+    if (openSugPanel===di&&openSugType===mealType) sp.appendChild(buildSugPanel(di,isParent,mealType));
+    body.appendChild(sp);
+  }
 }
 
 function renderParent() {
@@ -874,10 +891,10 @@ function mkParentWishCard() {
     const isScheducing=schedulingWish===w.id;
     const li=document.createElement('li'); li.className='wl-item'; li.style.flexWrap='wrap';
     li.innerHTML=`<span class="wl-name">${esc(w.name)}</span>
-      <span class="wl-by">${esc(w.by)}</span>
       <button class="wl-sched${isScheducing?' on':''}" data-id="${w.id}">
         ${isScheducing?'Välj dag ↓':'Schemalägg →'}
       </button>`;
+    li.insertBefore(mkPersonDot(w.userId, w.by), li.firstChild);
     li.querySelector('.wl-sched').addEventListener('click',()=>{
       schedulingWish=schedulingWish===w.id?null:w.id; render();
     });
