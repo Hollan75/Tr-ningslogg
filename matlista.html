@@ -735,16 +735,15 @@ function appendMealSection(body,di,base,sugs,mealType,isParent,showLabel) {
     });
     // Child suggestions are shown in "Barnens önskemål" below, not here
   } else {
-    const allM=[...bm,...sm].sort((a,b)=>{const sa=netScore(a.id),sb=netScore(b.id);return sb!==sa?sb-sa:0;});
-    if (!allM.length) ul.innerHTML=`<li style="font-size:.8rem;color:var(--t2);padding:6px 0;font-style:italic">Inga förslag ännu</li>`;
-    allM.forEach(meal=>{
+    // Child day view: only show base meals (parent-planned). Their own suggestions are in "Mina önskemål".
+    if (!bm.length) ul.innerHTML=`<li style="font-size:.8rem;color:var(--t2);padding:6px 0;font-style:italic">Inga rätter planerade ännu</li>`;
+    bm.forEach(meal=>{
       const voted=iVoted(meal.id),downed=iDownvoted(meal.id);
       const li=document.createElement('li'); li.className='mi';
       li.style.opacity=(downed&&!voted)?'.55':'1';
       li.innerHTML=`
         <button class="vbtn${voted?' on':''}" data-di="${di}" data-id="${meal.id}" title="Jag vill ha!">✓</button>
         <span class="mi-name">${esc(meal.name)}</span>
-        ${meal.by&&meal.by!=='Papa'?`<span class="mi-by">${esc(meal.by)}</span>`:''}
         <button class="vbtn-d${downed?' on':''}" data-di="${di}" data-id="${meal.id}" title="Vill inte ha">✕</button>`;
       li.appendChild(mkStarsRow(meal));
       ul.appendChild(li);
